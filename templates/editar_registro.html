@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Registro - Policlínica Sanitas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .bg-sanitas { background-color: #b83a56 !important; }
+        .text-sanitas { color: #b83a56 !important; }
+    </style>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-sanitas shadow px-4 py-3">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <span class="navbar-brand text-white fw-bold fs-4">✏️ Editar Registro Clínico</span>
+            <a href="/historial_paciente/{{ paciente.id }}" class="btn btn-outline-light btn-sm fw-bold px-3">← Cancelar y Volver</a>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-5" style="max-width: 800px;">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <h4 class="text-sanitas fw-bold mb-3">Paciente: {{ paciente.nombre }}</h4>
+                <p class="text-muted small mb-4">Cédula: {{ paciente.cedula if paciente.cedula else 'No especificada' }} • Fecha: <strong>{{ registro.fecha_consulta }}</strong></p>
+
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Motivo de Consulta:</label>
+                        <input type="text" class="form-control" name="motivo" value="{{ registro.motivo or '' }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Diagnóstico:</label>
+                        <textarea class="form-control" name="diagnostico" rows="2">{{ registro.diagnostico or '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-danger">Receta Médica:</label>
+                        <textarea class="form-control" name="receta" rows="3">{{ registro.receta or '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-secondary">Indicaciones y Recomendaciones:</label>
+                        <textarea class="form-control" name="indicaciones" rows="3">{{ registro.indicaciones or '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-primary">Estudios de Laboratorio:</label>
+                        <textarea class="form-control" name="laboratorio" rows="2">{{ registro.laboratorio or '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-success">Ecografías y Otros Estudios:</label>
+                        <textarea class="form-control" name="estudios" rows="2">{{ registro.estudios or '' }}</textarea>
+                    </div>
+
+                    <button type="submit" class="btn bg-sanitas text-white w-100 py-2 fw-bold mt-3">Guardar Cambios</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

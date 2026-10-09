@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardiología - Policlínica Sanitas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>.bg-sanitas { background-color: #b83a56 !important; } .text-sanitas { color: #b83a56 !important; }</style>
+</head>
+<body class="bg-white" onload="inicializarFechaHoy()">
+    <nav class="navbar navbar-dark shadow px-4 py-3" style="background-color: #b83a56;">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center"><a href="/" class="text-decoration-none text-white fw-bold fs-4">Policlínica Sanitas - Cardiología</a></div>
+            <div>
+                <a href="/" class="btn btn-outline-light fw-bold px-3 me-2 btn-sm">Panel Principal</a>
+                <a href="/logout" class="btn btn-dark fw-bold px-3 btn-sm">Salir</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-5">
+        {% if registro %}
+            <script>
+                const pacienteNombre = "{{ paciente.nombre }} {{ paciente.apellido }}";
+                const pacienteCedula = "{{ paciente.cedula if paciente.cedula else 'S/N' }}";
+                const fechaConsultaActual = "{{ registro.fecha_consulta if registro.fecha_consulta else 'Hoy' }}";
+            </script>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="text-sanitas fw-bold">🩺 Atendiendo a Paciente - Cardiología</h3>
+                <a href="/cardiologia" class="btn btn-outline-secondary btn-sm fw-bold">⬅ Volver a la Agenda</a>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-4 bg-light">
+                <div class="card-body">
+                    <h5 class="text-sanitas fw-bold mb-3">👤 Información del Paciente</h5>
+                    <div class="row">
+                        <div class="col-md-4"><strong>Nombre y Apellido:</strong> {{ paciente.nombre }} {{ paciente.apellido }}</div>
+                        <div class="col-md-4"><strong>Cédula (C.I.):</strong> {{ paciente.cedula if paciente.cedula else 'S/N' }}</div>
+                        <div class="col-md-4"><strong>Teléfono:</strong> {{ paciente.telefono if paciente.telefono else 'S/N' }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4">
+                    <h4 class="text-sanitas mb-4">📝 Evaluación Cardiológica y Signos Vitales</h4>
+                    <form method="POST">
+                        
+                        <!-- BLOQUE DE SIGNOS VITALES Y CLÍNICA MÉDICA -->
+                        <div class="p-4 bg-light rounded border border-danger mb-4 shadow-sm">
+                            <h5 class="text-sanitas fw-bold mb-3"><i class="bi bi-heart-pulse-fill"></i> Signos Vitales y Antropometría</h5>
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">Presión Arterial (mmHg):</label>
+                                    <input type="text" class="form-control bg-white" name="presion_arterial" value="{{ registro.presion_arterial if registro.presion_arterial else '' }}" placeholder="Ej: 120/80">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">Temperatura (°C):</label>
+                                    <input type="text" class="form-control bg-white" name="temperatura" value="{{ registro.temperatura if registro.temperatura else '' }}" placeholder="Ej: 36.5">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">Frecuencia Cardíaca (lpm):</label>
+                                    <input type="text" class="form-control bg-white" name="frecuencia_cardiaca" value="{{ registro.frecuencia_cardiaca if registro.frecuencia_cardiaca else '' }}" placeholder="Ej: 75">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">Frecuencia Respiratoria (rpm):</label>
+                                    <input type="text" class="form-control bg-white" name="frecuencia_respiratoria" value="{{ registro.frecuencia_respiratoria if registro.frecuencia_respiratoria else '' }}" placeholder="Ej: 18">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">Saturación de O₂ (%):</label>
+                                    <input type="text" class="form-control bg-white" name="saturacion" value="{{ registro.saturacion if registro.saturacion else '' }}" placeholder="Ej: 98">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label fw-bold">Peso (kg):</label>
+                                    <input type="text" class="form-control bg-white" name="peso" value="{{ registro.peso if registro.peso else '' }}" placeholder="Ej: 70">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label fw-bold">Talla (cm):</label>
+                                    <input type="text" class="form-control bg-white" name="talla" value="{{ registro.talla if registro.talla else '' }}" placeholder="Ej: 170">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- PARÁMETROS ESPECÍFICOS CARDIOLÓGICOS -->
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label fw-bold">Ritmo Cardíaco:</label><input type="text" class="form-control" name="ritmo_cardiaco" value="{{ registro.ritmo_cardiaco if registro.ritmo_cardiaco else '' }}"></div>
+                            <div class="col-md-6"><label class="form-label fw-bold">ECG / Electro:</label><input type="text" class="form-control" name="ecg" value="{{ registro.ecg if registro.ecg else '' }}"></div>
+                        </div>
+
+                        <!-- ANTECEDENTES PERSONALES Y FAMILIARES -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Antecedentes Personales:</label>
+                                <textarea class="form-control" name="antecedentes_personales" rows="2" placeholder="Ej: Hipertensión arterial, Diabetes, Tabaquismo...">{{ registro.antecedentes_personales if registro.antecedentes_personales else '' }}</textarea>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Antecedentes Familiares:</label>
+                                <textarea class="form-control" name="antecedentes_familiares" rows="2" placeholder="Ej: Cardiopatías en familiares directos...">{{ registro.antecedentes_familiares if registro.antecedentes_familiares else '' }}</textarea>
+                            </div>
+                        </div>
+
+                        <div class="mb-3"><label class="form-label fw-bold">Examen Físico:</label><textarea class="form-control" name="examen_fisico" rows="2">{{ registro.examen_fisico if registro.examen_fisico else '' }}</textarea></div>
+                        <div class="mb-3"><label class="form-label fw-bold">Diagnóstico:</label><textarea class="form-control" name="diagnostico" rows="2">{{ registro.diagnostico if registro.diagnostico else '' }}</textarea></div>
+                        <hr class="my-4">
+
+                        <!-- RECETA MÉDICA -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold text-danger m-0">Receta Médica:</label>
+                                <button type="button" class="btn btn-sm btn-outline-danger fw-bold" onclick="imprimirDocumento('RECETA MÉDICA', document.getElementById('inputReceta').value)">
+                                    <i class="bi bi-printer"></i> Imprimir Receta
+                                </button>
+                            </div>
+                            <textarea class="form-control" name="receta" id="inputReceta" rows="3">{{ registro.receta if registro.receta else '' }}</textarea>
+                        </div>
+
+                        <!-- INDICACIONES -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold text-secondary m-0">Indicaciones:</label>
+                                <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" onclick="imprimirDocumento('INDICACIONES', document.getElementById('inputIndicaciones').value)">
+                                    <i class="bi bi-printer"></i> Imprimir Indicaciones
+                                </button>
+                            </div>
+                            <textarea class="form-control" name="indicaciones" id="inputIndicaciones" rows="2">{{ registro.indicaciones if registro.indicaciones else '' }}</textarea>
+                        </div>
+
+                        <!-- SOLICITUD DE LABORATORIO (INDEPENDIENTE) -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold text-primary m-0">Solicitud de Laboratorio:</label>
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="imprimirDocumento('ORDEN DE LABORATORIO', document.getElementById('inputLaboratorio').value)">
+                                    <i class="bi bi-printer"></i> Imprimir Laboratorio
+                                </button>
+                            </div>
+                            <textarea class="form-control" name="laboratorio" id="inputLaboratorio" rows="3" placeholder="Ej: Perfil lipídico, Glucemia, Coagulación, Enzimas cardíacas...">{{ registro.laboratorio if registro.laboratorio else '' }}</textarea>
+                        </div>
+
+                        <!-- ESTUDIOS E IMÁGENES (INDEPENDIENTE) -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold text-success m-0">Estudios e Imágenes (Holter, Ecocardiograma, etc.):</label>
+                                <button type="button" class="btn btn-sm btn-outline-success fw-bold" onclick="imprimirDocumento('ORDEN DE ESTUDIOS E IMÁGENES', document.getElementById('inputEstudios').value)">
+                                    <i class="bi bi-printer"></i> Imprimir Estudios
+                                </button>
+                            </div>
+                            <textarea class="form-control" name="estudios" id="inputEstudios" rows="3" placeholder="Ej: Holter de 24hs, Ecocardiograma Doppler...">{{ registro.estudios if registro.estudios else '' }}</textarea>
+                        </div>
+
+                        <button type="submit" class="btn bg-sanitas text-white w-100 py-2 fw-bold mt-3">Guardar Cambios de la Consulta</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h4 class="text-sanitas mb-3">📁 Historial Clínico de Cardiología</h4>
+                    {% if historial %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered align-middle">
+                                <thead class="table-dark bg-sanitas text-white"><tr><th>Fecha</th><th>Diagnóstico</th><th>Signos Vitales / ECG</th><th>Receta / Laboratorio / Estudios</th></tr></thead>
+                                <tbody>
+                                    {% for item in historial %}
+                                    <tr>
+                                        <td>{{ item.fecha_consulta if item.fecha_consulta else 'N/D' }}</td>
+                                        <td><strong>{{ item.diagnostico if item.diagnostico else 'Sin diagnóstico' }}</strong></td>
+                                        <td>
+                                            {% if item.presion_arterial %}<div><em>PA:</em> {{ item.presion_arterial }}</div>{% endif %}
+                                            {% if item.temperatura %}<div><em>Temp:</em> {{ item.temperatura }}°C</div>{% endif %}
+                                            {% if item.frecuencia_cardiaca %}<div><em>FC:</em> {{ item.frecuencia_cardiaca }} lpm</div>{% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.receta %}<div><em>Receta:</em> {{ item.receta }}</div>{% endif %}
+                                            {% if item.laboratorio %}<div><em>Lab:</em> {{ item.laboratorio }}</div>{% endif %}
+                                            {% if item.estudios %}<div><em>Estudios:</em> {{ item.estudios }}</div>{% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No hay registros previos en el historial de cardiología para este paciente.</p>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <div class="card shadow-sm border-0 mb-4 bg-light">
+                <div class="card-body">
+                    <h4 class="text-sanitas fw-bold mb-3">📅 Agenda y Sala de Espera - Cardiología</h4>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle bg-white rounded shadow-sm">
+                            <thead class="table-dark bg-sanitas text-white"><tr><th>Hora Exacta</th><th>Paciente</th><th>Cédula</th><th>Motivo de Consulta</th><th>Estado</th><th class="text-center">Acción</th></tr></thead>
+                            <tbody>
+                                {% for reg in registros %}
+                                <tr>
+                                    <td class="fw-bold text-dark"><i class="bi bi-clock"></i> {{ reg.hora_turno }}</td>
+                                    <td class="fw-bold">{{ reg.paciente_nombre }}</td>
+                                    <td>{{ reg.cedula if reg.cedula else 'S/N' }}</td>
+                                    <td><span class="text-primary fw-semibold">{{ reg.motivo }}</span></td>
+                                    <td>
+                                        {% if reg.estado == 'Atendido' %}<span class="badge bg-success">Atendido</span>
+                                        {% elif reg.estado == 'Agendado' or not reg.estado %}<span class="badge bg-info text-dark">Agendado</span> <a href="/cambiar_estado/{{ reg.nombre_tabla }}/{{ reg.id }}/En Espera" class="btn btn-sm btn-warning fw-bold ms-1 text-dark shadow-sm">📍 Marcar Llegada</a>
+                                        {% else %}<span class="badge bg-warning text-dark">En Espera</span> <a href="/atender_consulta/{{ reg.nombre_tabla }}/{{ reg.id }}/{{ reg.paciente_id }}" class="btn btn-sm btn-success fw-bold">✔️ Atender</a>{% endif %}
+                                    </td>
+                                    <td class="text-center"><a href="/historial_paciente/{{ reg.paciente_id }}" class="btn btn-sm bg-sanitas text-white fw-bold">Ver / Atender</a></td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="6" class="text-center text-muted py-3">No hay turnos agendados para hoy.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h3 class="text-sanitas mb-4">Admisión y Turno: Cardiología</h3>
+                    <form method="POST">
+                        <div class="row mb-3">
+                            <div class="col-md-4"><label class="form-label fw-bold">Nombre y Apellido:</label><input type="text" class="form-control" name="paciente_nombre" required></div>
+                            <div class="col-md-2"><label class="form-label fw-bold">C.I. Nº:</label><input type="text" class="form-control" name="cedula"></div>
+                            <div class="col-md-3"><label class="form-label fw-bold">Teléfono:</label><input type="text" class="form-control" name="telefono"></div>
+                            <div class="col-md-3"><label class="form-label fw-bold">Fecha de Consulta:</label><input type="date" class="form-control" name="fecha_consulta" id="fechaConsultaInput" required></div>
+                        </div>
+                        <div class="row mb-3 p-3 bg-light rounded border">
+                            <div class="col-md-4"><label class="form-label fw-bold">⏰ Hora Exacta del Turno:</label><input type="time" class="form-control" name="hora_turno" value="08:00" required></div>
+                            <div class="col-md-4"><label class="form-label fw-bold">📌 Estado del Turno:</label><select class="form-select" name="estado"><option value="Agendado" selected>Agendado (Previo)</option><option value="En Espera">En Espera (Llegó a la clínica)</option></select></div>
+                            <div class="col-md-4"><label class="form-label fw-bold">Medio de llegada:</label><input type="text" class="form-control" name="medio_llegada"></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label fw-bold">Procedencia:</label><input type="text" class="form-control" name="procedencia"></div>
+                            <div class="col-md-6"><label class="form-label fw-bold">Motivo de Consulta:</label><input type="text" class="form-control" name="motivo" required></div>
+                        </div>
+                        <button type="submit" class="btn bg-sanitas text-white w-100 py-2 fw-bold mt-3">Guardar Registro y Asignar Turno</button>
+                    </form>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    <script>
+        function inicializarFechaHoy() { document.getElementById('fechaConsultaInput').value = new Date().toISOString().split('T')[0]; }
+        function imprimirDocumento(titulo, contenido) {
+            if (!contenido || contenido.trim() === "") { alert("No hay contenido escrito en esta sección para imprimir."); return; }
+            const ventana = window.open('', '_blank', 'width=800,height=750');
+            ventana.document.write(`
+                <html>
+                <head>
+                    <title>${titulo} - Policlínica Sanitas</title>
+                    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                    <style>
+                        body { padding: 30px; font-family: Arial, sans-serif; background: #fff; color: #333; } 
+                        .text-sanitas { color: #b83a56 !important; }
+                        .header-print { border-bottom: 2px solid #b83a56; padding-bottom: 12px; margin-bottom: 20px; }
+                        .logo-img { height: 65px; object-fit: contain; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header-print">
+                        <div class="row align-items-center">
+                            <div class="col-3 text-center">
+                                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo Sanitas" class="logo-img" onerror="this.style.display='none'">
+                            </div>
+                            <div class="col-9 text-end">
+                                <h4 class="fw-bold text-sanitas m-0">Policlínica Sanitas</h4>
+                                <p class="mb-1 text-muted" style="font-size: 0.8rem;">Especialidades Médicas | Lambaré - Valle Apu'a</p>
+                                <p class="mb-0 text-muted" style="font-size: 0.75rem; line-height: 1.3;">
+                                    📞 <strong>Tel:</strong> (0982) 420 735 | (021) 906 348<br>
+                                    ✉️ <strong>Email:</strong> policlinicasanitas26@gmail.com<br>
+                                    🌐 <strong>Facebook / Instagram:</strong> @policlinicasanitas
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-2 bg-light rounded border mb-4">
+                        <div class="row" style="font-size: 0.9rem;">
+                            <div class="col-8"><strong>Paciente:</strong> ${pacienteNombre}</div>
+                            <div class="col-4"><strong>Cédula (C.I.):</strong> ${pacienteCedula}</div>
+                            <div class="col-12 mt-1"><strong>Fecha de Emisión:</strong> ${fechaConsultaActual}</div>
+                        </div>
+                    </div>
+                    <h5 class="text-center text-sanitas fw-bold mb-3 text-uppercase" style="letter-spacing: 1px;">${titulo}</h5>
+                    <div class="p-3 border rounded bg-white mb-4" style="white-space: pre-wrap; font-size: 1.1rem; min-height: 220px;">${contenido}</div>
+                    <div class="mt-5 text-end" style="margin-top: 70px !important;">
+                        <p class="mb-5">___________________________________</p>
+                        <p class="fw-bold text-sanitas mb-0">Firma y Sello del Profesional</p>
+                        <p class="text-muted" style="font-size: 0.8rem;">Registro Profesional Nº: _______</p>
+                    </div>
+                </body>
+                </html>
+            `);
+            ventana.document.close();
+            setTimeout(() => {
+                ventana.focus();
+                ventana.print();
+                ventana.close();
+            }, 400);
+        }
+    </script>
+</body>
+</html>

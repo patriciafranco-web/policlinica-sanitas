@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentos Médicos - Policlínica Sanitas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons CDN para los logos profesionales de redes sociales -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #555; font-family: Arial, sans-serif; }
+        .hoja-impresion {
+            background: white;
+            width: 21cm;
+            min-height: 29.7cm;
+            margin: 20px auto;
+            padding: 1.5cm;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .bg-sanitas { background-color: #b83a56 !important; }
+        .text-sanitas { color: #b83a56 !important; }
+        .header-box {
+            background-color: #b83a56;
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .firma-area { border-top: 1px solid #333; width: 250px; margin: 50px auto 5px auto; text-align: center; }
+        
+        @media print {
+            body { background: none; }
+            .hoja-impresion { margin: 0; box-shadow: none; width: 100%; min-height: 100vh; page-break-after: always; }
+            .no-print { display: none !important; }
+            /* Forzar impresión de colores de fondo en navegadores */
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container text-center my-3 no-print">
+        <button onclick="window.print()" class="btn btn-light btn-lg fw-bold shadow">🖨️ Imprimir Documentos</button>
+        <a href="/" class="btn btn-outline-light btn-lg fw-bold ms-2">Volver al Panel</a>
+    </div>
+
+    <!-- 1. RECETA MÉDICA (MEDICAMENTOS) -->
+    {% if receta %}
+    <div class="hoja-impresion">
+        <div>
+            <div class="header-box row align-items-center mb-4">
+                <div class="col-3 text-center bg-white p-2 rounded">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="max-height: 65px; object-fit: contain;">
+                </div>
+                <div class="col-6 text-center">
+                    <h4 class="fw-bold m-0 text-white">POLICLÍNICA SANITAS</h4>
+                    <p class="small m-0 text-light" style="font-size: 0.75rem; line-height: 1.3;">
+                        Lambaré - Valle Apu'a | Tel: (0982) 420 735 - (021) 906 348<br>
+                        policlinicasanitas26@gmail.com<br>
+                        <i class="bi bi-instagram"></i> @sanitaspoliclinica &nbsp;|&nbsp; <i class="bi bi-facebook"></i> Sanitas Policlinica
+                    </p>
+                </div>
+                <div class="col-3 text-end">
+                    <span class="badge bg-white text-dark fs-6 fw-bold">RECETA MÉDICA</span>
+                </div>
+            </div>
+
+            <div class="row mb-4 p-2 bg-light rounded border" style="font-size: 0.9rem;">
+                <div class="col-8"><strong>Paciente:</strong> {{ paciente }}</div>
+                <div class="col-4"><strong>C.I. Nº:</strong> {{ cedula }}</div>
+                <div class="col-8 mt-1"><strong>Especialidad:</strong> {{ especialidad }}</div>
+                <div class="col-4 mt-1"><strong>Fecha:</strong> {{ fecha }}</div>
+            </div>
+
+            <div class="mb-5" style="min-height: 350px; white-space: pre-line; font-size: 1.1rem;">
+                <h5 class="text-sanitas fw-bold border-bottom pb-2 mb-3">PRESCRIPCIÓN MÉDICA</h5>
+                {{ receta }}
+            </div>
+        </div>
+
+        <div>
+            <div class="firma-area">
+                <strong style="font-size: 0.9rem;">Firma y Sello del Médico</strong>
+            </div>
+            <div class="text-center text-muted small border-top pt-2">
+                Policlínica Sanitas — Lambaré, Valle Apu'a
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 2. INDICACIONES MÉDICAS Y RECOMENDACIONES -->
+    {% if indicaciones %}
+    <div class="hoja-impresion">
+        <div>
+            <div class="header-box row align-items-center mb-4">
+                <div class="col-3 text-center bg-white p-2 rounded">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="max-height: 65px; object-fit: contain;">
+                </div>
+                <div class="col-6 text-center">
+                    <h4 class="fw-bold m-0 text-white">POLICLÍNICA SANITAS</h4>
+                    <p class="small m-0 text-light" style="font-size: 0.75rem; line-height: 1.3;">
+                        Lambaré - Valle Apu'a | Tel: (0982) 420 735 - (021) 906 348<br>
+                        policlinicasanitas26@gmail.com<br>
+                        <i class="bi bi-instagram"></i> @sanitaspoliclinica &nbsp;|&nbsp; <i class="bi bi-facebook"></i> Sanitas Policlinica
+                    </p>
+                </div>
+                <div class="col-3 text-end">
+                    <span class="badge bg-white text-dark fs-6 fw-bold">INDICACIONES</span>
+                </div>
+            </div>
+
+            <div class="row mb-4 p-2 bg-light rounded border" style="font-size: 0.9rem;">
+                <div class="col-8"><strong>Paciente:</strong> {{ paciente }}</div>
+                <div class="col-4"><strong>C.I. Nº:</strong> {{ cedula }}</div>
+                <div class="col-8 mt-1"><strong>Especialidad:</strong> {{ especialidad }}</div>
+                <div class="col-4 mt-1"><strong>Fecha:</strong> {{ fecha }}</div>
+            </div>
+
+            <div class="mb-5" style="min-height: 350px; white-space: pre-line; font-size: 1.1rem;">
+                <h5 class="text-sanitas fw-bold border-bottom pb-2 mb-3">INDICACIONES Y RECOMENDACIONES MÉDICAS</h5>
+                {{ indicaciones }}
+            </div>
+        </div>
+
+        <div>
+            <div class="firma-area">
+                <strong style="font-size: 0.9rem;">Firma y Sello del Médico</strong>
+            </div>
+            <div class="text-center text-muted small border-top pt-2">
+                Policlínica Sanitas — Lambaré, Valle Apu'a
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 3. ÓRDENES DE LABORATORIO -->
+    {% if laboratorio %}
+    <div class="hoja-impresion">
+        <div>
+            <div class="header-box row align-items-center mb-4">
+                <div class="col-3 text-center bg-white p-2 rounded">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="max-height: 65px; object-fit: contain;">
+                </div>
+                <div class="col-6 text-center">
+                    <h4 class="fw-bold m-0 text-white">POLICLÍNICA SANITAS</h4>
+                    <p class="small m-0 text-light" style="font-size: 0.75rem; line-height: 1.3;">
+                        Lambaré - Valle Apu'a | Tel: (0982) 420 735 - (021) 906 348<br>
+                        policlinicasanitas26@gmail.com<br>
+                        <i class="bi bi-instagram"></i> @sanitaspoliclinica &nbsp;|&nbsp; <i class="bi bi-facebook"></i> Sanitas Policlinica
+                    </p>
+                </div>
+                <div class="col-3 text-end">
+                    <span class="badge bg-white text-dark fs-6 fw-bold">LABORATORIO</span>
+                </div>
+            </div>
+
+            <div class="row mb-4 p-2 bg-light rounded border" style="font-size: 0.9rem;">
+                <div class="col-8"><strong>Paciente:</strong> {{ paciente }}</div>
+                <div class="col-4"><strong>C.I. Nº:</strong> {{ cedula }}</div>
+                <div class="col-8 mt-1"><strong>Especialidad:</strong> {{ especialidad }}</div>
+                <div class="col-4 mt-1"><strong>Fecha:</strong> {{ fecha }}</div>
+            </div>
+
+            <div class="mb-5" style="min-height: 350px; white-space: pre-line; font-size: 1.1rem;">
+                <h5 class="text-sanitas fw-bold border-bottom pb-2 mb-3">SOLICITUD DE ESTUDIOS DE LABORATORIO</h5>
+                {{ laboratorio }}
+            </div>
+        </div>
+
+        <div>
+            <div class="firma-area">
+                <strong style="font-size: 0.9rem;">Firma y Sello del Médico</strong>
+            </div>
+            <div class="text-center text-muted small border-top pt-2">
+                Policlínica Sanitas — Lambaré, Valle Apu'a
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 4. ESTUDIOS / IMÁGENES -->
+    {% if estudios %}
+    <div class="hoja-impresion">
+        <div>
+            <div class="header-box row align-items-center mb-4">
+                <div class="col-3 text-center bg-white p-2 rounded">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="max-height: 65px; object-fit: contain;">
+                </div>
+                <div class="col-6 text-center">
+                    <h4 class="fw-bold m-0 text-white">POLICLÍNICA SANITAS</h4>
+                    <p class="small m-0 text-light" style="font-size: 0.75rem; line-height: 1.3;">
+                        Lambaré - Valle Apu'a | Tel: (0982) 420 735 - (021) 906 348<br>
+                        policlinicasanitas26@gmail.com<br>
+                        <i class="bi bi-instagram"></i> @sanitaspoliclinica &nbsp;|&nbsp; <i class="bi bi-facebook"></i> Sanitas Policlinica
+                    </p>
+                </div>
+                <div class="col-3 text-end">
+                    <span class="badge bg-white text-dark fs-6 fw-bold">ESTUDIOS</span>
+                </div>
+            </div>
+
+            <div class="row mb-4 p-2 bg-light rounded border" style="font-size: 0.9rem;">
+                <div class="col-8"><strong>Paciente:</strong> {{ paciente }}</div>
+                <div class="col-4"><strong>C.I. Nº:</strong> {{ cedula }}</div>
+                <div class="col-8 mt-1"><strong>Especialidad:</strong> {{ especialidad }}</div>
+                <div class="col-4 mt-1"><strong>Fecha:</strong> {{ fecha }}</div>
+            </div>
+
+            <div class="mb-5" style="min-height: 350px; white-space: pre-line; font-size: 1.1rem;">
+                <h5 class="text-sanitas fw-bold border-bottom pb-2 mb-3">SOLICITUD DE ESTUDIOS E IMÁGENES</h5>
+                {{ estudios }}
+            </div>
+        </div>
+
+        <div>
+            <div class="firma-area">
+                <strong style="font-size: 0.9rem;">Firma y Sello del Médico</strong>
+            </div>
+            <div class="text-center text-muted small border-top pt-2">
+                Policlínica Sanitas — Lambaré, Valle Apu'a
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</body>
+</html>

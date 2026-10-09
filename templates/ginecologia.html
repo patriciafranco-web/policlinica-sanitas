@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ginecología y Obstetricia - Policlínica Sanitas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>.bg-sanitas { background-color: #b83a56 !important; } .text-sanitas { color: #b83a56 !important; }</style>
+</head>
+<body class="bg-white" onload="inicializarFicha()">
+    <nav class="navbar navbar-dark shadow px-4 py-3" style="background-color: #b83a56;">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <a href="/" class="text-decoration-none d-flex align-items-center">
+                    <div>
+                        <span class="text-white fw-bold fs-4 d-block lh-1">Policlínica Sanitas</span>
+                        <span class="fs-6 text-light">Rol: <strong>{{ rol | capitalize }}</strong></span>
+                    </div>
+                </a>
+            </div>
+            <div>
+                <a href="/" class="btn btn-outline-light fw-bold px-3 me-2 btn-sm">Panel Principal</a>
+                <a href="/logout" class="btn btn-dark fw-bold px-3 btn-sm">Salir</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-5">
+        {% if registro %}
+            <script>
+                const pacienteNombre = "{{ paciente.nombre }} {{ paciente.apellido }}";
+                const pacienteCedula = "{{ paciente.cedula if paciente.cedula else 'S/N' }}";
+                const fechaConsultaActual = "{{ registro.fecha_consulta if registro.fecha_consulta else 'Hoy' }}";
+            </script>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="text-sanitas fw-bold">🩺 Atendiendo a Paciente - Ginecología y Obstetricia</h3>
+                <a href="/ginecologia" class="btn btn-outline-secondary btn-sm fw-bold">⬅ Volver a la Agenda</a>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-4 bg-light">
+                <div class="card-body">
+                    <h5 class="text-sanitas fw-bold mb-3">👤 Información del Paciente</h5>
+                    <div class="row">
+                        <div class="col-md-4"><strong>Nombre y Apellido:</strong> {{ paciente.nombre }} {{ paciente.apellido }}</div>
+                        <div class="col-md-4"><strong>Cédula (C.I.):</strong> {{ paciente.cedula if paciente.cedula else 'S/N' }}</div>
+                        <div class="col-md-4"><strong>Teléfono:</strong> {{ paciente.telefono if paciente.telefono else 'S/N' }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4">
+                    <h4 class="text-sanitas mb-4">📝 Ficha Ginecológica y Obstétrica</h4>
+                    <form method="POST">
+                        
+                        <!-- SELECTOR DE EMBARAZO Y FUM -->
+                        <div class="row mb-3 p-3 bg-light rounded border">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">¿Paciente Embarazada?</label>
+                                <select class="form-select border-danger" id="embarazadaSelect" name="embarazada" onchange="toggleEmbarazo()">
+                                    <option value="si" {% if not registro.embarazada or registro.embarazada == 'si' %}selected{% endif %}>Sí (Control Prenatal)</option>
+                                    <option value="no" {% if registro.embarazada == 'no' %}selected{% endif %}>No / Consulta General</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">F.U.M. (Última Menstruación):</label>
+                                <input type="date" class="form-control" name="fum" id="fumInput" value="{{ registro.fum if registro.fum else '' }}" onchange="calcularObstetricia()">
+                            </div>
+                        </div>
+
+                        <!-- SECCIÓN PRENATAL Y CÁLCULOS (SE OCULTA SI NO ESTÁ EMBARAZADA) -->
+                        <div id="prenatalSection" class="row mb-3 p-3 bg-white rounded border border-danger">
+                            <h6 class="text-sanitas fw-bold mb-3"><i class="bi bi-heart-pulse"></i> Parámetros de Control Prenatal (Obstetricia)</h6>
+                            
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label fw-bold">F.P.P. (Probable Parto):</label>
+                                <input type="date" class="form-control bg-white" name="fpp" id="fppInput" value="{{ registro.fpp if registro.fpp else '' }}" readonly>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label fw-bold">Edad Gestacional:</label>
+                                <input type="text" class="form-control bg-white fw-bold text-danger" name="edad_gestacional" id="edadGestacionalInput" value="{{ registro.edad_gestacional if registro.edad_gestacional else '' }}" readonly>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label fw-bold">Peso (kg):</label>
+                                <input type="text" class="form-control" name="peso" value="{{ registro.peso if registro.peso else '' }}" placeholder="Ej: 65 kg">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label fw-bold">Presión Arterial (PA):</label>
+                                <input type="text" class="form-control" name="presion_arterial" value="{{ registro.presion_arterial if registro.presion_arterial else '' }}" placeholder="Ej: 120/80">
+                            </div>
+
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label fw-bold">Altura Uterina:</label>
+                                <input type="text" class="form-control" name="altura_uterina" value="{{ registro.altura_uterina if registro.altura_uterina else '' }}" placeholder="Ej: 24 cm">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label fw-bold">F.C.F. (Frec. Cardíaca Fetal):</label>
+                                <input type="text" class="form-control" name="fcf" value="{{ registro.fcf if registro.fcf else '' }}" placeholder="Ej: 140 lpm">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label fw-bold">Dinámica Uterina:</label>
+                                <input type="text" class="form-control" name="dinamica_uterina" value="{{ registro.dinamica_uterina if registro.dinamica_uterina else '' }}" placeholder="Ej: Negativa / Positiva">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label fw-bold">Movimientos Fetales:</label>
+                                <input type="text" class="form-control" name="movimientos_fetales" value="{{ registro.movimientos_fetales if registro.movimientos_fetales else '' }}" placeholder="Presentes / Ausentes">
+                            </div>
+                        </div>
+
+                        <!-- FÓRMULA OBSTÉTRICA -->
+                        <div class="row mb-3 p-3 bg-light rounded border">
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Gestas:</label>
+                                <input type="number" class="form-control bg-white" name="gestas" value="{{ registro.gestas if registro.gestas else '' }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Partos:</label>
+                                <input type="number" class="form-control bg-white" name="partos" value="{{ registro.partos if registro.partos else '' }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Cesáreas:</label>
+                                <input type="number" class="form-control bg-white" name="cesareas" value="{{ registro.cesareas if registro.cesareas else '' }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Abortos:</label>
+                                <input type="number" class="form-control bg-white" name="abortos" value="{{ registro.abortos if registro.abortos else '' }}">
+                            </div>
+                        </div>
+
+                        <!-- OTROS DATOS GINECOLÓGICOS -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">M.A.C. (Anticonceptivos):</label>
+                                <input type="text" class="form-control" name="mac" value="{{ registro.mac if registro.mac else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Citología (PAP):</label>
+                                <input type="text" class="form-control" name="citologia" value="{{ registro.citologia if registro.citologia else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Colposcopia:</label>
+                                <input type="text" class="form-control" name="colposcopia" value="{{ registro.colposcopia if registro.colposcopia else '' }}">
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Mamografía:</label>
+                                <input type="text" class="form-control" name="mamografia" value="{{ registro.mamografia if registro.mamografia else '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Vacunas:</label>
+                                <input type="text" class="form-control" name="vacunas" value="{{ registro.vacunas if registro.vacunas else '' }}" placeholder="Ej: Antitetánica, Antigripal...">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Informe de Ecografía / Estudios:</label>
+                            <textarea class="form-control" name="informe_ecografia" rows="2">{{ registro.informe_ecografia if registro.informe_ecografia else '' }}</textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Examen Físico:</label>
+                            <textarea class="form-control" name="examen_fisico" rows="2">{{ registro.examen_fisico if registro.examen_fisico else '' }}</textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Diagnóstico / Conclusión:</label>
+                            <textarea class="form-control" name="diagnostico" rows="2">{{ registro.diagnostico if registro.diagnostico else '' }}</textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Antecedentes Quirúrgicos / Personales:</label>
+                            <textarea class="form-control" name="antecedentes_quirurgicos" rows="2">{{ registro.antecedentes_quirurgicos if registro.antecedentes_quirurgicos else '' }}</textarea>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- RECETAS, INDICACIONES, LABORATORIO E IMÁGENES CON BOTONES DE IMPRESIÓN -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold text-danger m-0">Receta / Medicamentos:</label>
+                                <button type="button" class="btn btn-sm btn-outline-danger fw-bold" onclick="imprimirDocumento('RECETA MÉDICA', document.getElementById('inputReceta').value)">
+                                    <i class="bi bi-printer"></i> Imprimir Receta
+                                </button>
+                            </div>
+                            <textarea class="form-control" name="receta" id="inputReceta" rows="3">{{ registro.receta if registro.receta else '' }}</textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold text-secondary m-0">Indicaciones:</label>
+                                <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" onclick="imprimirDocumento('INDICACIONES MÉDICAS', document.getElementById('inputIndicaciones').value)">
+                                    <i class="bi bi-printer"></i> Imprimir Indicaciones
+                                </button>
+                            </div>
+                            <textarea class="form-control" name="indicaciones" id="inputIndicaciones" rows="3">{{ registro.indicaciones if registro.indicaciones else '' }}</textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold text-primary m-0">Solicitud de Laboratorio:</label>
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="imprimirDocumento('ORDEN DE LABORATORIO', document.getElementById('inputLaboratorio').value)">
+                                    <i class="bi bi-printer"></i> Imprimir Laboratorio
+                                </button>
+                            </div>
+                            <textarea class="form-control" name="laboratorio" id="inputLaboratorio" rows="3" placeholder="Ej: Hemograma, Glicemia, VDRL, Orina...">{{ registro.laboratorio if registro.laboratorio else '' }}</textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold text-success m-0">Estudios / Imágenes (Ecografías, Mamografías, etc.):</label>
+                                <button type="button" class="btn btn-sm btn-outline-success fw-bold" onclick="imprimirDocumento('ORDEN DE ESTUDIOS E IMÁGENES', document.getElementById('inputEstudios').value)">
+                                    <i class="bi bi-printer"></i> Imprimir Estudios
+                                </button>
+                            </div>
+                            <textarea class="form-control" name="estudios" id="inputEstudios" rows="3" placeholder="Ej: Ecografía obstétrica morfológica, Mamografía bilateral...">{{ registro.estudios if registro.estudios else '' }}</textarea>
+                        </div>
+
+                        <button type="submit" class="btn bg-sanitas text-white w-100 py-2 fw-bold mt-3">Guardar Cambios de la Consulta</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- HISTORIAL CLÍNICO -->
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h4 class="text-sanitas mb-3">📁 Historial Clínico - Ginecología</h4>
+                    {% if historial %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered align-middle">
+                                <thead class="table-dark bg-sanitas text-white">
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Datos Clave (FUM / EG / Peso / PA)</th>
+                                        <th>Diagnóstico</th>
+                                        <th>Vacunas</th>
+                                        <th>Receta / Estudios / Lab</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in historial %}
+                                    <tr>
+                                        <td>{{ item.fecha_consulta if item.fecha_consulta else 'N/D' }}</td>
+                                        <td>
+                                            {% if item.fum %}<div><strong>FUM:</strong> {{ item.fum }}</div>{% endif %}
+                                            {% if item.edad_gestacional %}<div><strong>EG:</strong> {{ item.edad_gestacional }}</div>{% endif %}
+                                            {% if item.peso %}<div><strong>Peso:</strong> {{ item.peso }}</div>{% endif %}
+                                            {% if item.presion_arterial %}<div><strong>PA:</strong> {{ item.presion_arterial }}</div>{% endif %}
+                                            {% if item.dinamica_uterina %}<div><strong>Dinámica:</strong> {{ item.dinamica_uterina }}</div>{% endif %}
+                                        </td>
+                                        <td><strong>{{ item.diagnostico if item.diagnostico else 'Sin diagnóstico' }}</strong></td>
+                                        <td>{{ item.vacunas if item.vacunas else 'N/R' }}</td>
+                                        <td>
+                                            {% if item.receta %}<div><em>Receta:</em> {{ item.receta }}</div>{% endif %}
+                                            {% if item.laboratorio %}<div><em>Lab:</em> {{ item.laboratorio }}</div>{% endif %}
+                                            {% if item.estudios %}<div><em>Estudios:</em> {{ item.estudios }}</div>{% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No hay registros previos en el historial de ginecología para este paciente.</p>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <!-- AGENDA Y SALA DE ESPERA -->
+            <div class="card shadow-sm border-0 mb-4 bg-light">
+                <div class="card-body">
+                    <h4 class="text-sanitas fw-bold mb-3">📅 Agenda y Sala de Espera - Ginecología</h4>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle bg-white rounded shadow-sm">
+                            <thead class="table-dark bg-sanitas text-white"><tr><th>Hora Exacta</th><th>Paciente</th><th>Cédula</th><th>Motivo de Consulta</th><th>Estado</th><th class="text-center">Acción</th></tr></thead>
+                            <tbody>
+                                {% for reg in registros %}
+                                <tr>
+                                    <td class="fw-bold text-dark"><i class="bi bi-clock"></i> {{ reg.hora_turno }}</td>
+                                    <td class="fw-bold">{{ reg.paciente_nombre }}</td>
+                                    <td>{{ reg.cedula if reg.cedula else 'S/N' }}</td>
+                                    <td><span class="text-primary fw-semibold">{{ reg.motivo }}</span></td>
+                                    <td>
+                                        {% if reg.estado == 'Atendido' %}<span class="badge bg-success">Atendido</span>
+                                        {% elif reg.estado == 'Agendado' or not reg.estado %}<span class="badge bg-info text-dark">Agendado</span> <a href="/cambiar_estado/{{ reg.nombre_tabla }}/{{ reg.id }}/En Espera" class="btn btn-sm btn-warning fw-bold ms-1 text-dark shadow-sm">📍 Marcar Llegada</a>
+                                        {% else %}<span class="badge bg-warning text-dark">En Espera</span> <a href="/atender_consulta/{{ reg.nombre_tabla }}/{{ reg.id }}/{{ reg.paciente_id }}" class="btn btn-sm btn-success fw-bold">✔ Atender</a>{% endif %}
+                                    </td>
+                                    <td class="text-center"><a href="/historial_paciente/{{ reg.paciente_id }}" class="btn btn-sm bg-sanitas text-white fw-bold">Ver / Atender</a></td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="6" class="text-center text-muted py-3">No hay turnos agendados para hoy.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ADMISIÓN -->
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h3 class="card-title text-sanitas mb-4">Admisión y Ficha: Ginecología</h3>
+                    <form method="POST">
+                        <div class="row mb-3">
+                            <div class="col-md-4"><label class="form-label fw-bold">Nombre y Apellido:</label><input type="text" class="form-control" name="paciente_nombre" required></div>
+                            <div class="col-md-2"><label class="form-label fw-bold">C.I. Nº:</label><input type="text" class="form-control" name="cedula"></div>
+                            <div class="col-md-3"><label class="form-label fw-bold">Teléfono:</label><input type="text" class="form-control" name="telefono"></div>
+                            <div class="col-md-3"><label class="form-label fw-bold">Fecha:</label><input type="date" class="form-control" name="fecha_consulta" id="fechaConsultaInput" required></div>
+                        </div>
+                        <div class="row mb-3 p-3 bg-light rounded border">
+                            <div class="col-md-4"><label class="form-label fw-bold">⏰ Hora Exacta del Turno:</label><input type="time" class="form-control" name="hora_turno" value="08:00" required></div>
+                            <div class="col-md-4"><label class="form-label fw-bold">📌 Estado del Turno:</label><select class="form-select" name="estado"><option value="Agendado" selected>Agendado (Previo)</option><option value="En Espera">En Espera (Llegó a la clínica)</option></select></div>
+                            <div class="col-md-4"><label class="form-label fw-bold">Medio de llegada:</label><input type="text" class="form-control" name="medio_llegada"></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label fw-bold">Procedencia:</label><input type="text" class="form-control" name="procedencia"></div>
+                            <div class="col-md-6"><label class="form-label fw-bold">Motivo de Consulta:</label><input type="text" class="form-control" name="motivo" required></div>
+                        </div>
+                        <button type="submit" class="btn bg-sanitas text-white w-100 py-2 fw-bold mt-3">Guardar Registro</button>
+                    </form>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function inicializarFicha() { 
+            const fechaEl = document.getElementById('fechaConsultaInput');
+            if (fechaEl) fechaEl.value = new Date().toISOString().split('T')[0];
+            toggleEmbarazo();
+            calcularObstetricia();
+        }
+
+        function toggleEmbarazo() {
+            const select = document.getElementById('embarazadaSelect');
+            const section = document.getElementById('prenatalSection');
+            if (select && section) {
+                if (select.value === 'si') {
+                    section.style.display = 'flex'; // Muestra FPP, EG, peso, PA, dinámica y controles
+                } else {
+                    section.style.display = 'none'; // Oculta todo lo obstétrico y deja solo la FUM
+                }
+            }
+        }
+
+        function calcularObstetricia() {
+            const fumInput = document.getElementById('fumInput');
+            const fppInput = document.getElementById('fppInput');
+            const egInput = document.getElementById('edadGestacionalInput');
+
+            if (!fumInput || !fumInput.value) return;
+
+            const fumDate = new Date(fumInput.value + 'T00:00:00');
+            
+            // FPP = FUM + 280 días (40 semanas)
+            const fppDate = new Date(fumDate.getTime() + (280 * 24 * 60 * 60 * 1000));
+            fppInput.value = fppDate.toISOString().split('T')[0];
+
+            // Edad Gestacional
+            const hoy = new Date();
+            hoy.setHours(0,0,0,0);
+            const diffTime = hoy - fumDate;
+
+            if (diffTime >= 0) {
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                const semanas = Math.floor(diffDays / 7);
+                const dias = diffDays % 7;
+                egInput.value = semanas + " semanas " + (dias > 0 ? "+ " + dias + " días" : "");
+            } else {
+                egInput.value = "FUM posterior a hoy";
+            }
+        }
+
+        function imprimirDocumento(titulo, contenido) {
+            if (!contenido || contenido.trim() === "") { alert("No hay contenido escrito en esta sección para imprimir."); return; }
+            const ventana = window.open('', '_blank', 'width=800,height=750');
+            ventana.document.write(`
+                <html>
+                <head>
+                    <title>${titulo} - Policlínica Sanitas</title>
+                    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                    <style>
+                        body { padding: 30px; font-family: Arial, sans-serif; background: #fff; color: #333; } 
+                        .text-sanitas { color: #b83a56 !important; }
+                        .header-print { border-bottom: 2px solid #b83a56; padding-bottom: 12px; margin-bottom: 20px; }
+                        .logo-img { height: 65px; object-fit: contain; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header-print">
+                        <div class="row align-items-center">
+                            <div class="col-3 text-center">
+                                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo Sanitas" class="logo-img" onerror="this.style.display='none'">
+                            </div>
+                            <div class="col-9 text-end">
+                                <h4 class="fw-bold text-sanitas m-0">Policlínica Sanitas</h4>
+                                <p class="mb-1 text-muted" style="font-size: 0.8rem;">Especialidades Médicas | Lambaré - Valle Apu'a</p>
+                                <p class="mb-0 text-muted" style="font-size: 0.75rem; line-height: 1.3;">
+                                    📞 <strong>Tel:</strong> (0982) 420 735 | (021) 906 348<br>
+                                    ✉️ <strong>Email:</strong> policlinicasanitas26@gmail.com<br>
+                                    🌐 <strong>Facebook / Instagram:</strong> @policlinicasanitas
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-2 bg-light rounded border mb-4">
+                        <div class="row" style="font-size: 0.9rem;">
+                            <div class="col-8"><strong>Paciente:</strong> ${pacienteNombre}</div>
+                            <div class="col-4"><strong>Cédula (C.I.):</strong> ${pacienteCedula}</div>
+                            <div class="col-12 mt-1"><strong>Fecha de Emisión:</strong> ${fechaConsultaActual}</div>
+                        </div>
+                    </div>
+                    <h5 class="text-center text-sanitas fw-bold mb-3 text-uppercase" style="letter-spacing: 1px;">${titulo}</h5>
+                    <div class="p-3 border rounded bg-white mb-4" style="white-space: pre-wrap; font-size: 1.1rem; min-height: 220px;">${contenido}</div>
+                    <div class="mt-5 text-end" style="margin-top: 70px !important;">
+                        <p class="mb-5">___________________________________</p>
+                        <p class="fw-bold text-sanitas mb-0">Firma y Sello del Profesional</p>
+                        <p class="text-muted" style="font-size: 0.8rem;">Registro Profesional Nº: _______</p>
+                    </div>
+                </body>
+                </html>
+            `);
+            ventana.document.close();
+            setTimeout(() => {
+                ventana.focus();
+                ventana.print();
+                ventana.close();
+            }, 400);
+        }
+    </script>
+</body>
+</html>

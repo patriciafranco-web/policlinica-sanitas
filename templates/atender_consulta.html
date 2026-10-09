@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Atención de Consulta - Policlínica Sanitas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark px-4">
+        <span class="navbar-brand">Atención Médica - Dr./Dra. {{ username }}</span>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm">Volver al Inicio</a>
+    </nav>
+
+    <div class="container my-4">
+        <!-- Datos del Paciente -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Datos del Paciente</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Nombre y Apellido:</strong> {{ paciente.nombre }} {{ paciente.apellido }}</p>
+                <p><strong>Cédula:</strong> {{ paciente.cedula }}</p>
+                <p><strong>Teléfono:</strong> {{ paciente.telefono }}</p>
+            </div>
+        </div>
+
+        <!-- Formulario de la Consulta Actual -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Registrar Evolución / Consulta Actual</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        {% for key, value in registro.items() %}
+                            {% if key not in ['id', 'paciente_id', 'fecha_registro', 'estado'] %}
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label text-capitalize"><strong>{{ key.replace('_', ' ') }}</strong></label>
+                                    <input type="text" class="form-control" name="{{ key }}" value="{{ value if value else '' }}">
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <button type="submit" class="btn btn-success mt-3">Guardar Cambios y Actualizar</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Historial Médico Unificado -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">Historial Médico Unificado del Paciente</h5>
+            </div>
+            <div class="card-body">
+                {% if historial %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Especialidad</th>
+                                    <th>Detalles / Diagnóstico / Observaciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in historial %}
+                                    <tr>
+                                        <td>{{ item.fecha_consulta if item.fecha_consulta else 'N/D' }}</td>
+                                        <td><span class="badge bg-info text-dark">{{ item.especialidad }}</span></td>
+                                        <td>
+                                            <ul>
+                                                {% for k, v in item.items() %}
+                                                    {% if v and k not in ['id', 'paciente_id', 'fecha_consulta', 'estado', 'especialidad', 'nombre_tabla'] %}
+                                                        <li><strong>{{ k.replace('_', ' ') }}:</strong> {{ v }}</li>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </ul>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">No hay registros previos en el historial para este paciente.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Listado de Pacientes - {{ especialidad }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .bg-sanitas { background-color: #7a1223 !important; }
+        .text-sanitas { color: #7a1223 !important; }
+        .navbar-brand img { height: 70px; }
+    </style>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-sanitas shadow px-4 py-2">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <a class="navbar-brand d-flex align-items-center m-0 text-decoration-none" href="/">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo Sanitas">
+                <div class="ms-3 text-white">
+                    <span class="fw-bold fs-4 d-block lh-1">Sanitas</span>
+                    <span class="fs-6 text-light d-block">Historial de Consultas</span>
+                </div>
+            </a>
+            <a href="/" class="btn btn-outline-light fw-bold px-4">Volver al Panel</a>
+        </div>
+    </nav>
+
+    <div class="container my-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3 class="text-sanitas fw-bold m-0">📂 Pacientes Registrados: {{ especialidad }}</h3>
+                    <a href="/{{ esp_key }}" class="btn bg-sanitas text-white fw-bold">➕ Nueva Consulta</a>
+                </div>
+
+                {% if registros %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-dark bg-sanitas text-white">
+                            <tr>
+                                <th>#ID</th>
+                                <th>Fecha</th>
+                                <th>Paciente</th>
+                                <th>Motivo de Consulta</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reg in registros %}
+                            <tr>
+                                <td>{{ reg.id }}</td>
+                                <td>{{ reg.fecha_consulta }}</td>
+                                <td class="fw-bold">{{ reg.paciente_nombre }}</td>
+                                <td>{{ reg.motivo }}</td>
+                                <td>
+                                    <a href="{{ url_for('ver_receta', paciente=reg.paciente_nombre, especialidad=especialidad, receta=reg.receta, laboratorio=reg.laboratorio, estudios=reg.estudios, fecha=reg.fecha_consulta) }}" class="btn btn-sm btn-outline-danger fw-bold">
+                                        🖨️ Ver / Imprimir Hojas
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-warning text-center py-4" role="alert">
+                    <h5>No hay registros médicos guardados en esta especialidad todavía.</h5>
+                    <p class="mb-0 text-muted">Complete un formulario de consulta para que aparezca en este listado.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
