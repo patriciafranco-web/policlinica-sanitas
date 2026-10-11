@@ -123,7 +123,12 @@
                                         {% elif reg.estado == 'Agendado' or not reg.estado %}<span class="badge bg-info text-dark">Agendado</span> <a href="/cambiar_estado/{{ reg.nombre_tabla }}/{{ reg.id }}/En Espera" class="btn btn-sm btn-warning fw-bold ms-1 text-dark shadow-sm">📍 Marcar Llegada</a>
                                         {% else %}<span class="badge bg-warning text-dark">En Espera</span> <a href="/atender_consulta/{{ reg.nombre_tabla }}/{{ reg.id }}/{{ reg.paciente_id }}" class="btn btn-sm btn-success fw-bold">✔️ Atender</a>{% endif %}
                                     </td>
-                                    <td class="text-center"><a href="/historial_paciente/{{ reg.paciente_id }}" class="btn btn-sm bg-sanitas text-white fw-bold">Ver / Atender</a></td>
+                                    <td class="text-center">
+                                        <!-- Acciones para Médico y Secretaria (Incluye Editar y Eliminar) -->
+                                        <a href="/atender_consulta/{{ reg.nombre_tabla }}/{{ reg.id }}/{{ reg.paciente_id }}" class="btn btn-sm bg-sanitas text-white fw-bold">Ver / Atender</a>
+                                        <a href="/editar_registro/{{ reg.nombre_tabla }}/{{ reg.id }}" class="btn btn-sm btn-primary fw-bold" title="Editar turno o motivo">✏️</a>
+                                        <a href="/eliminar_registro/{{ reg.nombre_tabla }}/{{ reg.id }}" class="btn btn-sm btn-outline-danger fw-bold" title="Eliminar turno" onclick="return confirm('¿Estás seguro de eliminar este agendamiento?');">🗑️</a>
+                                    </td>
                                 </tr>
                                 {% else %}
                                 <tr><td colspan="6" class="text-center text-muted py-3">No hay turnos agendados para hoy.</td></tr>
