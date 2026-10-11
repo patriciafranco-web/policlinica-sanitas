@@ -240,7 +240,7 @@ def listar_pacientes():
         else:
             pacientes = conn.execute('SELECT * FROM pacientes GROUP BY cedula ORDER BY id DESC').fetchall()
     return render_template(
-        'pacientes.html', pacientes=pacientes, rol=session.get('rol'), username=session.get('username'), busqueda=busqueda
+        'lista_pacientes.html', pacientes=pacientes, rol=session.get('rol'), username=session.get('username'), busqueda=busqueda
     )
 
 
@@ -291,7 +291,6 @@ def editar_registro(tabla, registro_id):
         if request.method == 'POST':
             cursor = conn.cursor()
             
-            # Si la secretaria edita los datos básicos del paciente desde aquí
             nuevo_nombre = request.form.get('nombre_paciente')
             nueva_cedula = request.form.get('cedula_paciente')
             nuevo_telefono = request.form.get('telefono_paciente')
