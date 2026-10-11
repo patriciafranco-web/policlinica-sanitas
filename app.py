@@ -249,6 +249,10 @@ def historial_paciente(paciente_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
+    # RESTRICCIÓN: La secretaría no puede ver historiales médicos ni recetas
+    if session.get('rol') == 'secretaria':
+        return redirect(url_for('index'))
+    
     with get_db_connection() as conn:
         paciente = conn.execute('SELECT * FROM pacientes WHERE id = ?', (paciente_id,)).fetchone()
         if not paciente:
@@ -304,7 +308,7 @@ def editar_registro(tabla, registro_id):
                 cursor.execute(f'UPDATE {tabla} SET motivo = ? WHERE id = ?', (nuevo_motivo, registro_id))
             
             conn.commit()
-            return redirect(url_for('historial_paciente', paciente_id=registro['paciente_id']))
+            return redirect(url_for('listar_pacientes'))
             
     return render_template('editar_registro.html', registro=registro, paciente=paciente, tabla=tabla, rol=session.get('rol'))
 
@@ -319,7 +323,6 @@ def eliminar_registro(tabla, registro_id):
             paciente_id = registro['paciente_id']
             conn.execute(f'DELETE FROM {tabla} WHERE id = ?', (registro_id,))
             conn.commit()
-            return redirect(url_for('historial_paciente', paciente_id=paciente_id))
     return redirect(url_for('listar_pacientes'))
 
 
