@@ -816,7 +816,10 @@ def atender_consulta(tabla, id_registro, paciente_id):
     )
 
 
+# Inicializar la base de datos al cargar la app (vital para Gunicorn en Render)
+init_db()
+
 if __name__ == '__main__':
-    init_db()
-    threading.Timer(1.0, lambda: webbrowser.open('http://127.0.0.1:5000')).start()
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    threading.Timer(1.0, lambda: webbrowser.open(f'http://127.0.0.1:{port}')).start()
+    app.run(host='0.0.0.0', port=port, debug=False)
