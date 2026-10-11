@@ -7,7 +7,7 @@ import webbrowser
 import threading
 from flask import Flask, redirect, render_template, request, session, url_for
 
-# --- CONFIGURACIÓN DE RUTAS Y DISCO PERSISTENTE EN RENDER ---
+# --- CONFIGURACIÓN ROBUSTA DE RUTAS Y DISCO PERSISTENTE EN RENDER ---
 if os.path.exists('/var/data'):
     base_dir = '/var/data'
 else:
@@ -16,8 +16,14 @@ else:
     else:
         base_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Detección inteligente de carpetas templates y static
-template_dir = os.path.join(base_dir, 'templates')
+# Detección inteligente y flexible de la carpeta de plantillas ('templates' o 'Plantillas')
+if os.path.exists(os.path.join(base_dir, 'templates')):
+    template_dir = os.path.join(base_dir, 'templates')
+elif os.path.exists(os.path.join(base_dir, 'Plantillas')):
+    template_dir = os.path.join(base_dir, 'Plantillas')
+else:
+    template_dir = os.path.join(base_dir, 'templates')
+
 if not os.path.exists(template_dir) and hasattr(sys, '_MEIPASS'):
     template_dir = os.path.join(sys._MEIPASS, 'templates')
 
