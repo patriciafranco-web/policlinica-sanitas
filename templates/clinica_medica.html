@@ -38,6 +38,7 @@
                     <div class="row">
                         <div class="col-md-4"><strong>Nombre:</strong> {{ paciente.nombre }} {{ paciente.apellido }}</div>
                         <div class="col-md-4"><strong>C.I.:</strong> {{ paciente.cedula if paciente.cedula else 'S/N' }}</div>
+                        <div class="col-md-3"><strong>Edad:</strong> {{ paciente.edad if paciente.edad else 'S/N' }} años</div>
                         <div class="col-md-4"><strong>Teléfono:</strong> {{ paciente.telefono if paciente.telefono else 'S/N' }}</div>
                     </div>
                 </div>
