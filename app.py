@@ -527,8 +527,11 @@ def atender_consulta(tabla, id_registro, paciente_id):
     )
 
 
-# --- CRUCIAL PARA GUNICORN EN RENDER ---
-init_db()
+# --- INICIALIZACIÓN SEGURA PARA PRODUCCIÓN (GUNICORN / RENDER) ---
+try:
+    init_db()
+except Exception as e:
+    print(f"Error al inicializar la base de datos: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
