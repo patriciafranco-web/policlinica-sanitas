@@ -332,8 +332,8 @@ def historial_paciente(paciente_id):
 
 @app.route('/editar_registro/<tabla>/<int:registro_id>', methods=['GET', 'POST'])
 def editar_registro(tabla, registro_id):
-    if 'user_id' not in session or session.get('rol') == 'secretaria':
-        return redirect(url_for('index'))
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
     with get_db_connection() as conn:
         registro = conn.execute(f'SELECT * FROM {tabla} WHERE id = ?', (registro_id,)).fetchone()
         if not registro:
@@ -358,10 +358,10 @@ def editar_registro(tabla, registro_id):
     return render_template('editar_registro.html', registro=registro, paciente=paciente, tabla=tabla, rol=session.get('rol'))
 
 
-@app.route('/eliminar_registro/<tabla>/<int:registro_id>', methods=['POST'])
+@app.route('/eliminar_registro/<tabla>/<int:registro_id>', methods=['GET', 'POST'])
 def eliminar_registro(tabla, registro_id):
-    if 'user_id' not in session or session.get('rol') == 'secretaria':
-        return redirect(url_for('index'))
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
     with get_db_connection() as conn:
         registro = conn.execute(f'SELECT * FROM {tabla} WHERE id = ?', (registro_id,)).fetchone()
         if registro:
@@ -369,6 +369,28 @@ def eliminar_registro(tabla, registro_id):
             conn.execute(f'DELETE FROM {tabla} WHERE id = ?', (registro_id,))
             conn.commit()
             return redirect(url_for('historial_paciente', paciente_id=paciente_id))
+    return redirect(url_for('listar_pacientes'))
+
+
+@app.route('/eliminar_paciente/<int:paciente_id>', methods=['GET', 'POST'])
+def eliminar_paciente(paciente_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    with get_db_connection() as conn:
+        paciente = conn.execute('SELECT cedula FROM pacientes WHERE id = ?', (paciente_id,)).fetchone()
+        if paciente:
+            cedula = paciente['cedula']
+            mismos = conn.execute('SELECT id FROM pacientes WHERE cedula = ?', (cedula,)).fetchall()
+            p_ids = [row['id'] for row in mismos]
+            tablas = [
+                'f_ginecologia', 'f_clinica', 'f_psicologia', 'f_traumatologia',
+                'f_nutricion', 'f_pediatria', 'f_cardiologia', 'f_otros'
+            ]
+            for t in tablas:
+                for pid in p_ids:
+                    conn.execute(f'DELETE FROM {t} WHERE paciente_id = ?', (pid,))
+            conn.execute('DELETE FROM pacientes WHERE cedula = ?', (cedula,))
+            conn.commit()
     return redirect(url_for('listar_pacientes'))
 
 
