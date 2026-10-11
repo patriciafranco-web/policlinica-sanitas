@@ -91,81 +91,30 @@ def init_db():
             except:
                 pass
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS f_ginecologia (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, paciente_id INTEGER, fecha_consulta TEXT, hora_turno TEXT, estado TEXT DEFAULT 'Agendado', motivo TEXT, procedencia TEXT, medio_llegada TEXT,
-                fum TEXT, fpp TEXT, edad_gestacional TEXT, gestas INTEGER, partos INTEGER, cesareas INTEGER, abortos INTEGER, mac TEXT, 
-                menarca TEXT, antecedentes_quirurgicos TEXT,
-                presion_arterial TEXT, altura_uterina TEXT, fcf TEXT, peso TEXT, citologia TEXT, colposcopia TEXT, mamografia TEXT, 
-                informe_ecografia TEXT, vacunas TEXT, examen_fisico TEXT, antecedentes_personales TEXT, antecedentes_familiares TEXT, 
-                diagnostico TEXT, receta TEXT, indicaciones TEXT, laboratorio TEXT, estudios TEXT, fecha_registro TEXT
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS f_clinica (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, paciente_id INTEGER, fecha_consulta TEXT, hora_turno TEXT, estado TEXT DEFAULT 'Agendado', motivo TEXT, procedencia TEXT, medio_llegada TEXT,
-                presion_arterial TEXT, temperatura TEXT, frecuencia_cardiaca TEXT, frecuencia_respiratoria TEXT, saturacion TEXT, peso TEXT, talla TEXT, 
-                examen_fisico TEXT, antecedentes_personales TEXT, antecedentes_familiares TEXT, 
-                diagnostico TEXT, receta TEXT, indicaciones TEXT, laboratorio TEXT, estudios TEXT, fecha_registro TEXT
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS f_psicologia (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, paciente_id INTEGER, fecha_consulta TEXT, hora_turno TEXT, estado TEXT DEFAULT 'Agendado', motivo TEXT, procedencia TEXT, medio_llegada TEXT,
-                antecedentes TEXT, evaluacion_mental TEXT, antecedentes_personales TEXT, antecedentes_familiares TEXT, 
-                diagnostico TEXT, receta TEXT, indicaciones TEXT, laboratorio TEXT, estudios TEXT, fecha_registro TEXT
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS f_traumatologia (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, paciente_id INTEGER, fecha_consulta TEXT, hora_turno TEXT, estado TEXT DEFAULT 'Agendado', motivo TEXT, procedencia TEXT, medio_llegada TEXT,
-                examen_fisico TEXT, estudios_previos TEXT, antecedentes_personales TEXT, antecedentes_familiares TEXT, 
-                diagnostico TEXT, receta TEXT, indicaciones TEXT, laboratorio TEXT, estudios TEXT, fecha_registro TEXT
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS f_nutricion (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, paciente_id INTEGER, fecha_consulta TEXT, hora_turno TEXT, estado TEXT DEFAULT 'Agendado', motivo TEXT, procedencia TEXT, medio_llegada TEXT,
-                peso REAL, talla REAL, imc REAL, circunferencia_abdominal TEXT, 
-                puntuacion_corporal TEXT, distancia_objetivo TEXT, tipo_cuerpo TEXT, estado_nutricion TEXT,
-                porcentaje_grasa TEXT, masa_muscular TEXT, grasa_visceral TEXT, agua_corporal TEXT, 
-                masa_osea TEXT, bmr TEXT, masa_grasa TEXT, musculo_esqueletico TEXT, 
-                masa_agua TEXT, peso_ideal TEXT, masa_magra TEXT, edad_corporal TEXT, 
-                control_peso TEXT, control_grasas TEXT, control_muscular TEXT, 
-                porcentaje_proteinas TEXT, grasa_subcutanea TEXT, frecuencia_cardiaca TEXT,
-                plan_nutricional TEXT, antecedentes_personales TEXT, antecedentes_familiares TEXT, 
-                receta TEXT, indicaciones TEXT, laboratorio TEXT, estudios TEXT, fecha_registro TEXT
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS f_pediatria (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, paciente_id INTEGER, fecha_consulta TEXT, hora_turno TEXT, estado TEXT DEFAULT 'Agendado', motivo TEXT, procedencia TEXT, medio_llegada TEXT,
-                peso REAL, talla REAL, perimetro_cefalico TEXT, desarrollo_psicomotor TEXT, vacunas_al_dia TEXT, alergias TEXT, examen_fisico TEXT, 
-                antecedentes_personales TEXT, antecedentes_familiares TEXT, diagnostico TEXT, receta TEXT, indicaciones TEXT, laboratorio TEXT, estudios TEXT, fecha_registro TEXT
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS f_cardiologia (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, paciente_id INTEGER, fecha_consulta TEXT, hora_turno TEXT, estado TEXT DEFAULT 'Agendado', motivo TEXT, procedencia TEXT, medio_llegada TEXT,
-                presion_arterial TEXT, temperatura TEXT, frecuencia_cardiaca TEXT, frecuencia_respiratoria TEXT, saturacion TEXT, peso TEXT, talla TEXT, 
-                ritmo_cardiaco TEXT, ecg TEXT, examen_fisico TEXT, 
-                antecedentes_personales TEXT, antecedentes_familiares TEXT, 
-                diagnostico TEXT, receta TEXT, indicaciones TEXT, laboratorio TEXT, estudios TEXT, fecha_registro TEXT
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS f_otros (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, paciente_id INTEGER, fecha_consulta TEXT, hora_turno TEXT, estado TEXT DEFAULT 'Agendado', motivo TEXT, procedencia TEXT, medio_llegada TEXT,
-                observaciones TEXT, antecedentes_personales TEXT, antecedentes_familiares TEXT, diagnostico TEXT, receta TEXT, indicaciones TEXT, laboratorio TEXT, estudios TEXT, fecha_registro TEXT
-            )
-        ''')
+        tablas_esp = [
+            'f_ginecologia', 'f_clinica', 'f_psicologia', 'f_traumatologia',
+            'f_nutricion', 'f_pediatria', 'f_cardiologia', 'f_otros'
+        ]
+        
+        for t in tablas_esp:
+            cursor.execute(f'''
+                CREATE TABLE IF NOT EXISTS {t} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                    paciente_id INTEGER, 
+                    fecha_consulta TEXT, 
+                    hora_turno TEXT, 
+                    estado TEXT DEFAULT 'Agendado', 
+                    motivo TEXT, 
+                    procedencia TEXT, 
+                    medio_llegada TEXT,
+                    diagnostico TEXT, 
+                    receta TEXT, 
+                    indicaciones TEXT, 
+                    laboratorio TEXT, 
+                    estudios TEXT, 
+                    fecha_registro TEXT
+                )
+            ''')
         conn.commit()
 
 
@@ -299,8 +248,7 @@ def listar_pacientes():
 def historial_paciente(paciente_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    if session.get('rol') == 'secretaria':
-        return redirect(url_for('index'))
+    
     with get_db_connection() as conn:
         paciente = conn.execute('SELECT * FROM pacientes WHERE id = ?', (paciente_id,)).fetchone()
         if not paciente:
@@ -339,22 +287,26 @@ def editar_registro(tabla, registro_id):
         if not registro:
             return redirect(url_for('index'))
         paciente = conn.execute('SELECT * FROM pacientes WHERE id = ?', (registro['paciente_id'],)).fetchone()
+        
         if request.method == 'POST':
             cursor = conn.cursor()
-            cursor.execute(f'PRAGMA table_info({tabla})')
-            cols = [col['name'] for col in cursor.fetchall()]
-            updates = []
-            values = []
-            for key, val in request.form.items():
-                if key in cols and key not in ['id', 'paciente_id', 'fecha_registro']:
-                    updates.append(f'{key} = ?')
-                    values.append(val)
-            if updates:
-                values.append(registro_id)
-                query = f"UPDATE {tabla} SET {', '.join(updates)} WHERE id = ?"
-                cursor.execute(query, values)
-                conn.commit()
+            
+            # Si la secretaria edita los datos básicos del paciente desde aquí
+            nuevo_nombre = request.form.get('nombre_paciente')
+            nueva_cedula = request.form.get('cedula_paciente')
+            nuevo_telefono = request.form.get('telefono_paciente')
+            nueva_edad = request.form.get('edad_paciente')
+            nuevo_motivo = request.form.get('motivo')
+            
+            if nuevo_nombre:
+                cursor.execute('UPDATE pacientes SET nombre = ?, cedula = ?, telefono = ?, edad = ? WHERE id = ?',
+                               (nuevo_nombre, nueva_cedula, nuevo_telefono, nueva_edad, registro['paciente_id']))
+            if nuevo_motivo:
+                cursor.execute(f'UPDATE {tabla} SET motivo = ? WHERE id = ?', (nuevo_motivo, registro_id))
+            
+            conn.commit()
             return redirect(url_for('historial_paciente', paciente_id=registro['paciente_id']))
+            
     return render_template('editar_registro.html', registro=registro, paciente=paciente, tabla=tabla, rol=session.get('rol'))
 
 
@@ -433,16 +385,7 @@ def guardar_registro_comun(request_form, nombre_tabla, especialidad_str, endpoin
         cursor.execute(query, vals_sql)
         conn.commit()
 
-    if not is_medico:
-        return redirect(url_for(endpoint_retorno))
-
-    receta = request_form.get('receta', '')
-    indicaciones = request_form.get('indicaciones', '')
-    laboratorio = request_form.get('laboratorio', '')
-    estudios = request_form.get('estudios', '')
-    return redirect(
-        url_for('ver_receta', paciente=paciente_nombre, cedula=cedula, telefono=telefono, especialidad=especialidad_str, receta=receta, indicaciones=indicaciones, laboratorio=laboratorio, estudios=estudios, fecha=fecha_consulta)
-    )
+    return redirect(url_for(endpoint_retorno))
 
 
 @app.route('/ver_receta')
@@ -528,8 +471,8 @@ def otros():
 
 @app.route('/atender_consulta/<tabla>/<int:id_registro>/<int:paciente_id>', methods=['GET', 'POST'])
 def atender_consulta(tabla, id_registro, paciente_id):
-    if 'user_id' not in session or session.get('rol') == 'secretaria':
-        return redirect(url_for('index'))
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
     tablas_validas = [
         'f_ginecologia', 'f_clinica', 'f_psicologia', 'f_traumatologia',
         'f_nutricion', 'f_pediatria', 'f_cardiologia', 'f_otros'
