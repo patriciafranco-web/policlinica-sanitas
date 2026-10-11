@@ -7,43 +7,26 @@ import webbrowser
 import threading
 from flask import Flask, redirect, render_template, request, session, url_for
 
-# --- CONFIGURACIÓN ROBUSTA DE RUTAS Y DISCO PERSISTENTE EN RENDER ---
+# --- CONFIGURACIÓN DE RUTAS ABSOLUTAS (SOLUCIÓN DEFINITIVA RENDER) ---
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Si estamos en Render, guardamos la base de datos en /var/data (disco persistente)
 if os.path.exists('/var/data'):
-    base_dir = '/var/data'
+    db_base_dir = '/var/data'
 else:
-    if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+    db_base_dir = base_dir
 
-# Detección inteligente y flexible de la carpeta de plantillas ('templates' o 'Plantillas')
-if os.path.exists(os.path.join(base_dir, 'templates')):
-    template_dir = os.path.join(base_dir, 'templates')
-elif os.path.exists(os.path.join(base_dir, 'Plantillas')):
-    template_dir = os.path.join(base_dir, 'Plantillas')
-else:
-    template_dir = os.path.join(base_dir, 'templates')
-
-if not os.path.exists(template_dir) and hasattr(sys, '_MEIPASS'):
-    template_dir = os.path.join(sys._MEIPASS, 'templates')
-
+# Las plantillas y archivos estáticos se leen directamente del proyecto
+template_dir = os.path.join(base_dir, 'templates')
 static_dir = os.path.join(base_dir, 'static')
-if not os.path.exists(static_dir) and hasattr(sys, '_MEIPASS'):
-    static_dir = os.path.join(sys._MEIPASS, 'static')
 
 app = Flask(
     __name__, template_folder=template_dir, static_folder=static_dir
 )
 app.secret_key = 'sanitas_secreto_key_2026'
 
-# Detección automática de la base de datos en el disco persistente o local
-db_path_con_ext = os.path.join(base_dir, 'policlinica.db')
-db_path_sin_ext = os.path.join(base_dir, 'policlinica')
-
-if os.path.exists(db_path_sin_ext) and not os.path.exists(db_path_con_ext):
-    DB_PATH = db_path_sin_ext
-else:
-    DB_PATH = db_path_con_ext
+# Detección automática de la base de datos
+DB_PATH = os.path.join(db_base_dir, 'policlinica.db')
 
 
 def get_db_connection():
