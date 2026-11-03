@@ -1,541 +1,800 @@
-from datetime import datetime
-import os
-import shutil
 import sqlite3
-import sys
-import webbrowser
+import os
+import io
+import time
 import threading
-from flask import Flask, redirect, render_template, request, session, url_for
+import json
+from flask import Flask, jsonify, render_template, request, send_file, url_for
+from PIL import Image, ImageDraw, ImageFont
+import requests
+import shutil
 
-# --- CONFIGURACIÓN DE RUTAS ABSOLUTAS Y RENDER ---
-base_dir = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__)
 
-if os.path.exists('/var/data'):
-    db_base_dir = '/var/data'
+ID_INSTANCE = "710722782905"
+API_TOKEN_INSTANCE = "085f2d211be547b9a9377b0021c03faf845beb16436644748b"
+
+def formatear_telefono(telefono):
+    tel_limpio = "".join(filter(str.isdigit, str(telefono)))
+    if len(tel_limpio) == 10 and tel_limpio.startswith("0"):
+        tel_limpio = "595" + tel_limpio[1:]
+    elif len(tel_limpio) == 9 and tel_limpio.startswith("9"):
+        tel_limpio = "595" + tel_limpio
+    return tel_limpio
+
+def enviar_mensaje_whatsapp(telefono, texto):
+    def tarea():
+        tel_formateado = formatear_telefono(telefono)
+        url = f"https://7107.api.greenapi.com/waInstance{ID_INSTANCE}/sendMessage/{API_TOKEN_INSTANCE}"
+        payload = {"chatId": f"{tel_formateado}@c.us", "message": texto}
+        try:
+            requests.post(url, json=payload)
+        except Exception as e:
+            print(f"❌ Error enviando mensaje Green API: {e}")
+    threading.Thread(target=tarea).start()
+
+def enviar_imagen_whatsapp(telefono, url_imagen, caption):
+    def tarea():
+        tel_formateado = formatear_telefono(telefono)
+        url = f"https://7107.api.greenapi.com/waInstance{ID_INSTANCE}/sendFileByUrl/{API_TOKEN_INSTANCE}"
+        url_imagen_segura = url_imagen.replace("http://", "https://")
+        payload = {
+            "chatId": f"{tel_formateado}@c.us",
+            "urlFile": url_imagen_segura,
+            "fileName": "ticket_vifran.png",
+            "caption": caption,
+        }
+        try:
+            requests.post(url, json=payload)
+        except Exception as e:
+            print(f"❌ Error enviando imagen Green API: {e}")
+    threading.Thread(target=tarea).start()
+
+def enviar_ticket_directo(telefono, boleto_id, host_url, caption):
+    def tarea():
+        tel_formateado = formatear_telefono(telefono)
+        url_txt = f"https://7107.api.greenapi.com/waInstance{ID_INSTANCE}/sendMessage/{API_TOKEN_INSTANCE}"
+        try:
+            requests.post(url_txt, json={"chatId": f"{tel_formateado}@c.us", "message": "✅ *¡Pago verificado!* Generando tu boleto oficial con QR..."})
+        except Exception as e:
+            print(f"❌ Error enviando aviso previo: {e}")
+        
+        output = crear_imagen_boleto_memoria(boleto_id, host_url)
+        if not output: return
+        
+        url_up = f"https://7107.api.greenapi.com/waInstance{ID_INSTANCE}/sendFileByUpload/{API_TOKEN_INSTANCE}"
+        payload = {'chatId': f"{tel_formateado}@c.us", 'caption': caption}
+        files = [('file', (f'ticket_{boleto_id}.png', output.getvalue(), 'image/png'))]
+        
+        try:
+            requests.post(url_up, data=payload, files=files)
+        except Exception as e:
+            print(f"❌ Error subiendo ticket directamente: {e}")
+            
+    threading.Thread(target=tarea).start()
+
+CARPETA_DISCO = "/varidata"
+CARPETA_LOCAL = "."
+
+if os.path.exists(CARPETA_DISCO):
+    CARPETA_DATOS = CARPETA_DISCO
 else:
-    db_base_dir = base_dir
+    CARPETA_DATOS = CARPETA_LOCAL
+    try:
+        os.makedirs(CARPETA_DISCO, exist_ok=True)
+        if os.path.exists(CARPETA_DISCO):
+            CARPETA_DATOS = CARPETA_DISCO
+    except:
+        pass
 
-template_dir = os.path.join(base_dir, 'templates')
-static_dir = os.path.join(base_dir, 'static')
+DB_PATH = os.path.join(CARPETA_DATOS, "sorteos.db")
+BACKUP_PATH = os.path.join(CARPETA_LOCAL, "sorteos_respaldo.db")
 
-app = Flask(
-    __name__, template_folder=template_dir, static_folder=static_dir
-)
-app.secret_key = 'sanitas_secreto_key_2026'
+print(f"📂 [VIFRAN DB] Ruta principal: {os.path.abspath(DB_PATH)}")
 
-DB_PATH = os.path.join(db_base_dir, 'policlinica.db')
+def respaldar_base_datos():
+    try:
+        if os.path.exists(DB_PATH) and DB_PATH != BACKUP_PATH:
+            shutil.copy2(DB_PATH, BACKUP_PATH)
+    except Exception as e:
+        print(f"⚠️ Error al respaldar DB: {e}")
 
-
-def get_db_connection():
+def get_db():
+    if not os.path.exists(DB_PATH) and os.path.exists(BACKUP_PATH):
+        try:
+            shutil.copy2(BACKUP_PATH, DB_PATH)
+            print("🔄 [VIFRAN DB] Base de datos recuperada desde el respaldo espejo.")
+        except:
+            pass
+            
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    try:
-        conn.execute('PRAGMA journal_mode=WAL;')
-    except Exception:
-        pass
     return conn
 
-
 def init_db():
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
+    if not os.path.exists(DB_PATH) and os.path.exists(BACKUP_PATH):
+        try:
+            shutil.copy2(BACKUP_PATH, DB_PATH)
+        except:
+            pass
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE,
-                password TEXT,
-                rol TEXT
-            )
-        ''')
-
-        usuarios_default = [
-            ('doctora', 'sanitas123', 'doctora'),
-            ('secretaria', 'sanitas123', 'secretaria'),
-            ('ginecologia', 'sanitas123', 'medico'),
-            ('cardiologia', 'sanitas123', 'medico'),
-            ('pediatria', 'sanitas123', 'medico'),
-            ('clinica', 'sanitas123', 'medico'),
-            ('psicologia', 'sanitas123', 'medico'),
-            ('traumatologia', 'sanitas123', 'medico'),
-            ('nutricion', 'sanitas123', 'medico'),
-            ('otros', 'sanitas123', 'medico'),
-        ]
-
-        for user, pwd, rol in usuarios_default:
-            cursor.execute(
-                'INSERT OR IGNORE INTO usuarios (username, password, rol) VALUES (?, ?, ?)',
-                (user, pwd, rol),
-            )
-
-        cursor.execute(
-            "UPDATE usuarios SET password = 'sanitas123' WHERE LOWER(username) = 'secretaria'"
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sorteos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            titulo TEXT NOT NULL,
+            precio INTEGER NOT NULL,
+            limite_boletos INTEGER NOT NULL,
+            estado TEXT NOT NULL,
+            imagen_nombre TEXT
         )
-
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS boletos (
+            id INTEGER,
+            sorteo_id INTEGER,
+            lote_id INTEGER,
+            nombre TEXT,
+            telefono TEXT,
+            cedula TEXT,
+            cantidad_lote INTEGER,
+            imagen_comprobante TEXT,
+            metodo_pago TEXT,
+            detalle_pago TEXT,
+            estado TEXT,
+            impreso INTEGER,
+            PRIMARY KEY (id, sorteo_id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS clientes (
+            telefono TEXT PRIMARY KEY,
+            nombre TEXT,
+            cedula TEXT
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS config (
+            clave TEXT PRIMARY KEY,
+            valor TEXT
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS numeros_liberados (
+            sorteo_id INTEGER,
+            numero INTEGER,
+            PRIMARY KEY (sorteo_id, numero)
+        )
+    ''')
+    
+    conn.commit()
+    
+    cursor.execute('SELECT COUNT(*) FROM sorteos')
+    if cursor.fetchone()[0] == 0:
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS pacientes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT,
-                cedula TEXT,
-                telefono TEXT,
-                edad TEXT,
-                fecha_nacimiento TEXT
-            )
+            INSERT INTO sorteos (id, titulo, precio, limite_boletos, estado, imagen_nombre)
+            VALUES (1, 'Sorteo de 4 iPhones (15 Pro Max, 14 Pro Max, 13 Pro Max y 11)', 10000, 2000, 'Activo', 'flyer_sorteo.jpg')
         ''')
-
-        cursor.execute("PRAGMA table_info(pacientes)")
-        cols_pacientes = [col[1] for col in cursor.fetchall()]
-        if 'edad' not in cols_pacientes:
-            try:
-                cursor.execute("ALTER TABLE pacientes ADD COLUMN edad TEXT")
-            except:
-                pass
-
-        tablas_esp = [
-            'f_ginecologia', 'f_clinica', 'f_psicologia', 'f_traumatologia',
-            'f_nutricion', 'f_pediatria', 'f_cardiologia', 'f_otros'
-        ]
+    else:
+        cursor.execute("UPDATE sorteos SET limite_boletos = 2000 WHERE id = 1")
+    
+    conn.commit()
         
-        for t in tablas_esp:
-            cursor.execute(f'''
-                CREATE TABLE IF NOT EXISTS {t} (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                    paciente_id INTEGER, 
-                    fecha_consulta TEXT, 
-                    hora_turno TEXT, 
-                    estado TEXT DEFAULT 'Agendado', 
-                    motivo TEXT, 
-                    procedencia TEXT, 
-                    medio_llegada TEXT,
-                    diagnostico TEXT, 
-                    receta TEXT, 
-                    indicaciones TEXT, 
-                    laboratorio TEXT, 
-                    estudios TEXT, 
-                    fecha_registro TEXT
-                )
-            ''')
+    cursor.execute("SELECT valor FROM config WHERE clave = 'contador_1'")
+    if not cursor.fetchone():
+        cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES ('contador_1', '187')")
         conn.commit()
 
+    cursor.execute("SELECT valor FROM config WHERE clave = 'lote_contador'")
+    if not cursor.fetchone():
+        cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES ('lote_contador', '1')")
+        conn.commit()
+        
+    conn.close()
+    respaldar_base_datos()
 
-# --- RUTAS DE LA APLICACIÓN ---
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = None
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        with get_db_connection() as conn:
-            user = conn.execute(
-                'SELECT * FROM usuarios WHERE username = ? AND password = ?',
-                (username, password),
-            ).fetchone()
-            if user:
-                session['user_id'] = user['id']
-                session['username'] = user['username']
-                session['rol'] = user['rol']
-                return redirect(url_for('index'))
-            else:
-                error = 'Usuario o contraseña incorrectos.'
-    return render_template('login.html', error=error)
+init_db()
 
+ADMIN_USERS = {
+    "patriciafranco": "Vifran2026*Secure$",
+    "edgarfranco": "Vifran2026*Secure$",
+}
 
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
+bloqueo_compra = threading.Lock()
+SESIONES_WHATSAPP = {}
 
-
-@app.route('/cambiar_password', methods=['GET', 'POST'])
-def cambiar_password():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    mensaje = None
-    error = None
-    if request.method == 'POST':
-        password_actual = request.form.get('password_actual')
-        nueva_password = request.form.get('nueva_password')
-        user_id = session.get('user_id')
-        with get_db_connection() as conn:
-            user = conn.execute(
-                'SELECT * FROM usuarios WHERE id = ? AND password = ?',
-                (user_id, password_actual),
-            ).fetchone()
-            if user:
-                conn.execute(
-                    'UPDATE usuarios SET password = ? WHERE id = ?',
-                    (nueva_password, user_id),
-                )
-                conn.commit()
-                mensaje = '¡Contraseña actualizada con éxito!'
-            else:
-                error = 'La contraseña actual es incorrecta.'
-    return render_template(
-        'cambiar_password.html',
-        mensaje=mensaje,
-        error=error,
-        rol=session.get('rol'),
-        username=session.get('username'),
-    )
-
-
-@app.route('/cambiar_estado/<tabla>/<int:id_registro>/<nuevo_estado>')
-def cambiar_estado(tabla, id_registro, nuevo_estado):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    tablas_validas = [
-        'f_ginecologia', 'f_clinica', 'f_psicologia', 'f_traumatologia',
-        'f_nutricion', 'f_pediatria', 'f_cardiologia', 'f_otros'
-    ]
-    if tabla in tablas_validas:
-        with get_db_connection() as conn:
-            conn.execute(f'UPDATE {tabla} SET estado = ? WHERE id = ?', (nuevo_estado, id_registro))
-            conn.commit()
-    endpoint_map = {
-        'f_ginecologia': 'ginecologia', 'f_clinica': 'clinica_medica',
-        'f_psicologia': 'psicologia', 'f_traumatologia': 'traumatologia',
-        'f_nutricion': 'nutricion', 'f_pediatria': 'pediatria',
-        'f_cardiologia': 'cardiologia', 'f_otros': 'otros',
-    }
-    return redirect(url_for(endpoint_map.get(tabla, 'index')))
-
-
-@app.route('/')
+@app.route("/")
 def index():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return render_template(
-        'index.html', rol=session.get('rol'), username=session.get('username')
-    )
+    return render_template("index.html")
 
+@app.route("/admin")
+def admin_panel():
+    return render_template("admin.html")
 
-@app.route('/hacer_backup')
-def hacer_backup():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    backup_dir = os.path.join(base_dir, 'backups')
-    if not os.path.exists(backup_dir):
-        os.makedirs(backup_dir)
-    fecha_str = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    backup_filename = os.path.join(backup_dir, f'policlinica_respaldo_{fecha_str}.db')
-    try:
-        shutil.copy(DB_PATH, backup_filename)
-        mensaje = "✅ ¡Copia de seguridad creada con éxito!"
-    except Exception as e:
-        mensaje = '❌ Error al crear la copia de seguridad.'
-    return render_template(
-        'index.html', rol=session.get('rol'), username=session.get('username'), mensaje_backup=mensaje
-    )
+@app.route("/api/sorteos", methods=["GET"])
+def obtener_sorteos():
+    conn = get_db()
+    sorteos = conn.execute("SELECT * FROM sorteos WHERE estado = 'Activo'").fetchall()
+    conn.close()
+    return jsonify({"sorteos": [dict(s) for s in sorteos]})
 
+@app.route("/api/comprar", methods=["POST"])
+def comprar():
+    data = request.json
+    sorteo_id = int(data.get("sorteo_id", 1))
+    nombre = data.get("nombre")
+    telefono = data.get("telefono")
+    cedula = data.get("cedula")
+    cantidad = int(data.get("cantidad", 1))
+    metodo_pago = data.get("metodo_pago", "Transferencia Directa")
+    detalle_pago = data.get("detalle_pago", "")
 
-@app.route('/pacientes')
-def listar_pacientes():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    busqueda = request.args.get('q', '').strip()
-    with get_db_connection() as conn:
-        if busqueda:
-            query = "SELECT * FROM pacientes WHERE cedula LIKE ? OR nombre LIKE ? GROUP BY cedula ORDER BY id DESC"
-            pacientes = conn.execute(query, (f'%{busqueda}%', f'%{busqueda}%')).fetchall()
-        else:
-            pacientes = conn.execute('SELECT * FROM pacientes GROUP BY cedula ORDER BY id DESC').fetchall()
-    return render_template(
-        'lista_pacientes.html', pacientes=pacientes, rol=session.get('rol'), username=session.get('username'), busqueda=busqueda
-    )
+    if not nombre or not telefono or not cedula or cantidad < 1:
+        return jsonify({"error": "Todos los campos son obligatorios."}), 400
 
-
-@app.route('/historial_paciente/<int:paciente_id>')
-def historial_paciente(paciente_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    # RESTRICCIÓN: La secretaría no puede ver historiales médicos ni recetas
-    if session.get('rol') == 'secretaria':
-        return redirect(url_for('index'))
-    
-    with get_db_connection() as conn:
-        paciente = conn.execute('SELECT * FROM pacientes WHERE id = ?', (paciente_id,)).fetchone()
-        if not paciente:
-            return redirect(url_for('listar_pacientes'))
-        cedula = paciente['cedula']
-        if cedula:
-            mismos_pacientes = conn.execute('SELECT id FROM pacientes WHERE cedula = ?', (cedula,)).fetchall()
-            paciente_ids = [row['id'] for row in mismos_pacientes]
-        else:
-            paciente_ids = [paciente_id]
-        placeholders = ','.join(['?'] * len(paciente_ids))
-        historial = []
-        tablas = [
-            ('Ginecología y Obstetricia', 'f_ginecologia'), ('Clínica Médica', 'f_clinica'),
-            ('Pediatría', 'f_pediatria'), ('Cardiología', 'f_cardiologia'),
-            ('Psicología Clínica', 'f_psicologia'), ('Traumatología', 'f_traumatologia'),
-            ('Nutrición', 'f_nutricion'), ('Otros Servicios', 'f_otros'),
-        ]
-        for nombre_esp, tabla in tablas:
-            query = f'SELECT *, ? as especialidad, ? as nombre_tabla FROM {tabla} WHERE paciente_id IN ({placeholders})'
-            params = [nombre_esp, tabla] + paciente_ids
-            registros = conn.execute(query, params).fetchall()
-            historial.extend(registros)
-        historial = sorted(historial, key=lambda x: x['fecha_consulta'] if x['fecha_consulta'] else '', reverse=True)
-    return render_template(
-        'historial_compartido.html', paciente=paciente, historial=historial, rol=session.get('rol'), username=session.get('username')
-    )
-
-
-@app.route('/editar_registro/<tabla>/<int:registro_id>', methods=['GET', 'POST'])
-def editar_registro(tabla, registro_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    with get_db_connection() as conn:
-        registro = conn.execute(f'SELECT * FROM {tabla} WHERE id = ?', (registro_id,)).fetchone()
-        if not registro:
-            return redirect(url_for('index'))
-        paciente = conn.execute('SELECT * FROM pacientes WHERE id = ?', (registro['paciente_id'],)).fetchone()
-        
-        if request.method == 'POST':
-            cursor = conn.cursor()
-            
-            nuevo_nombre = request.form.get('nombre_paciente')
-            nueva_cedula = request.form.get('cedula_paciente')
-            nuevo_telefono = request.form.get('telefono_paciente')
-            nueva_edad = request.form.get('edad_paciente')
-            nuevo_motivo = request.form.get('motivo')
-            
-            if nuevo_nombre:
-                cursor.execute('UPDATE pacientes SET nombre = ?, cedula = ?, telefono = ?, edad = ? WHERE id = ?',
-                               (nuevo_nombre, nueva_cedula, nuevo_telefono, nueva_edad, registro['paciente_id']))
-            if nuevo_motivo:
-                cursor.execute(f'UPDATE {tabla} SET motivo = ? WHERE id = ?', (nuevo_motivo, registro_id))
-            
-            conn.commit()
-            return redirect(url_for('listar_pacientes'))
-            
-    return render_template('editar_registro.html', registro=registro, paciente=paciente, tabla=tabla, rol=session.get('rol'))
-
-
-@app.route('/eliminar_registro/<tabla>/<int:registro_id>', methods=['GET', 'POST'])
-def eliminar_registro(tabla, registro_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    with get_db_connection() as conn:
-        registro = conn.execute(f'SELECT * FROM {tabla} WHERE id = ?', (registro_id,)).fetchone()
-        if registro:
-            paciente_id = registro['paciente_id']
-            conn.execute(f'DELETE FROM {tabla} WHERE id = ?', (registro_id,))
-            conn.commit()
-    return redirect(url_for('listar_pacientes'))
-
-
-@app.route('/eliminar_paciente/<int:paciente_id>', methods=['GET', 'POST'])
-def eliminar_paciente(paciente_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    with get_db_connection() as conn:
-        paciente = conn.execute('SELECT cedula FROM pacientes WHERE id = ?', (paciente_id,)).fetchone()
-        if paciente:
-            cedula = paciente['cedula']
-            mismos = conn.execute('SELECT id FROM pacientes WHERE cedula = ?', (cedula,)).fetchall()
-            p_ids = [row['id'] for row in mismos]
-            tablas = [
-                'f_ginecologia', 'f_clinica', 'f_psicologia', 'f_traumatologia',
-                'f_nutricion', 'f_pediatria', 'f_cardiologia', 'f_otros'
-            ]
-            for t in tablas:
-                for pid in p_ids:
-                    conn.execute(f'DELETE FROM {t} WHERE paciente_id = ?', (pid,))
-            conn.execute('DELETE FROM pacientes WHERE cedula = ?', (cedula,))
-            conn.commit()
-    return redirect(url_for('listar_pacientes'))
-
-
-def guardar_registro_comun(request_form, nombre_tabla, especialidad_str, endpoint_retorno):
-    paciente_nombre = request_form['paciente_nombre']
-    cedula = request_form.get('cedula', '')
-    telefono = request_form.get('telefono', '')
-    edad = request_form.get('edad', '')
-    fecha_nacimiento = request_form.get('fecha_nacimiento', '')
-    fecha_consulta = request_form['fecha_consulta']
-    hora_turno = request_form.get('hora_turno', '08:00')
-    estado = request_form.get('estado', 'Agendado')
-    motivo = request_form['motivo']
-    procedencia = request_form.get('procedencia', '')
-    medio_llegada = request_form.get('medio_llegada', '')
-    rol_usuario = session.get('rol')
-    is_medico = rol_usuario in ['doctora', 'medico']
-
-    with get_db_connection() as conn:
+    with bloqueo_compra:
+        conn = get_db()
         cursor = conn.cursor()
-        cursor.execute(
-            'INSERT INTO pacientes (nombre, cedula, telefono, edad, fecha_nacimiento) VALUES (?, ?, ?, ?, ?)',
-            (paciente_nombre, cedula, telefono, edad, fecha_nacimiento),
+        cursor.execute("INSERT OR REPLACE INTO clientes (telefono, nombre, cedula) VALUES (?, ?, ?)", (telefono, nombre, cedula))
+        sorteo = cursor.execute("SELECT * FROM sorteos WHERE id = ? AND estado = 'Activo'", (sorteo_id,)).fetchone()
+        if not sorteo:
+            conn.close()
+            return jsonify({"error": "El sorteo seleccionado ya no está activo."}), 400
+
+        total_activos = cursor.execute("SELECT COUNT(*) FROM boletos WHERE sorteo_id = ?", (sorteo_id,)).fetchone()[0]
+        if (total_activos + cantidad) > sorteo["limite_boletos"]:
+            conn.close()
+            return jsonify({"error": "No hay suficientes boletos disponibles para esa cantidad."}), 400
+
+        lote_row = cursor.execute("SELECT valor FROM config WHERE clave = 'lote_contador'").fetchone()
+        current_lote = int(lote_row["valor"]) if lote_row else 1
+        cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES ('lote_contador', ?)", (str(current_lote + 1),))
+
+        nuevos_boletos_ids = []
+        for _ in range(cantidad):
+            liberado = cursor.execute("SELECT numero FROM numeros_liberados WHERE sorteo_id = ? ORDER BY numero ASC LIMIT 1", (sorteo_id,)).fetchone()
+            if liberado:
+                num_boleto = liberado["numero"]
+                cursor.execute("DELETE FROM numeros_liberados WHERE sorteo_id = ? AND numero = ?", (sorteo_id, num_boleto))
+            else:
+                cont_row = cursor.execute("SELECT valor FROM config WHERE clave = ?", (f"contador_{sorteo_id}",)).fetchone()
+                num_boleto = int(cont_row["valor"]) if cont_row else 187
+                cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES (?, ?)", (f"contador_{sorteo_id}", str(num_boleto + 1)))
+            nuevos_boletos_ids.append(num_boleto)
+
+        for num_boleto in nuevos_boletos_ids:
+            cursor.execute('''
+                INSERT INTO boletos (id, sorteo_id, lote_id, nombre, telefono, cedula, cantidad_lote, imagen_comprobante, metodo_pago, detalle_pago, estado, impreso)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', 0)
+            ''', (num_boleto, sorteo_id, current_lote, nombre, telefono, cedula, cantidad, "", metodo_pago, detalle_pago))
+
+        conn.commit()
+        conn.close()
+        respaldar_base_datos()
+
+    rango_str = (
+        f"#{str(nuevos_boletos_ids[0]).zfill(5)}"
+        if len(nuevos_boletos_ids) == 1
+        else f"#{str(nuevos_boletos_ids[0]).zfill(5)} al #{str(nuevos_boletos_ids[-1]).zfill(5)}"
+    )
+
+    return jsonify({
+        "mensaje": f"¡Reserva de {cantidad} boleto(s) registrada con éxito!",
+        "rango": rango_str,
+        "lote_id": current_lote
+    }), 200
+
+@app.route("/api/subir-comprobante", methods=["POST"])
+def subir_comprobante():
+    data = request.json
+    lote_id = data.get("lote_id")
+    imagen_comprobante = data.get("imagen_comprobante", "")
+
+    if not lote_id or not imagen_comprobante:
+        return jsonify({"error": "Faltan datos del lote o la imagen."}), 400
+
+    with bloqueo_compra:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE boletos SET imagen_comprobante = ? WHERE lote_id = ?", (imagen_comprobante, lote_id))
+        conn.commit()
+        conn.close()
+        respaldar_base_datos()
+
+    return jsonify({"mensaje": "¡Comprobante adjuntado correctamente al lote!"}), 200
+
+@app.route("/api/consultar", methods=["POST"])
+def consultar():
+    data = request.json
+    termino = data.get("termino")
+    conn = get_db()
+    boletos = conn.execute("SELECT * FROM boletos WHERE telefono = ? OR cedula = ? ORDER BY id ASC", (termino, termino)).fetchall()
+    
+    if not boletos:
+        conn.close()
+        return jsonify({"encontrado": False, "mensaje": "No se encontraron boletos."}), 404
+
+    resultados = []
+    for b in boletos:
+        b_dict = dict(b)
+        sorteo = conn.execute("SELECT titulo FROM sorteos WHERE id = ?", (b_dict["sorteo_id"],)).fetchone()
+        b_dict["sorteo_titulo"] = sorteo["titulo"] if sorteo else "Sorteo General"
+        resultados.append(b_dict)
+        
+    conn.close()
+    return jsonify({"encontrado": True, "boletos": resultados}), 200
+
+@app.route("/api/webhook/whatsapp", methods=["POST"])
+def webhook_whatsapp():
+    datos = request.json
+    if not datos:
+        return jsonify({"status": "ignored"}), 200
+
+    try:
+        senderData = datos.get("senderData", {})
+        messageData = datos.get("messageData", {})
+        chat_id = senderData.get("chatId", "")
+        if not chat_id and "chatData" in datos:
+            chat_id = datos.get("chatData", {}).get("chatId", "")
+
+        telefono = chat_id.split("@")[0] if "@" in chat_id else str(chat_id)
+        tipo_mensaje = messageData.get("typeMessage", "")
+        es_imagen = (
+            "fileMessageData" in messageData or "imageMessageData" in messageData
+            or "jpeg" in tipo_mensaje.lower() or "image" in tipo_mensaje.lower()
         )
-        paciente_id = cursor.lastrowid
-        campos_ignorar = [
-            'paciente_nombre', 'cedula', 'telefono', 'edad', 'fecha_nacimiento',
-            'fecha_consulta', 'hora_turno', 'estado', 'motivo', 'procedencia', 'medio_llegada', 'embarazada'
-        ]
-        keys = []
-        values = []
-        for key, val in request_form.items():
-            if key not in campos_ignorar:
-                keys.append(key)
-                values.append(val if is_medico else '')
-        keys_sql = ', '.join(['paciente_id', 'fecha_consulta', 'hora_turno', 'estado', 'motivo', 'procedencia', 'medio_llegada'] + keys)
-        placeholders_sql = ', '.join(['?'] * (7 + len(keys)))
-        vals_sql = [paciente_id, fecha_consulta, hora_turno, estado, motivo, procedencia, medio_llegada] + values
-        query = f"INSERT INTO {nombre_tabla} ({keys_sql}, fecha_registro) VALUES ({placeholders_sql}, datetime('now'))"
-        cursor.execute(query, vals_sql)
-        conn.commit()
 
-    return redirect(url_for(endpoint_retorno))
+        mensaje = ""
+        if "textMessageData" in messageData:
+            mensaje = messageData["textMessageData"].get("textMessage", "")
+        elif "extendedTextMessageData" in messageData:
+            mensaje = messageData["extendedTextMessageData"].get("text", "")
 
+        if telefono and not mensaje and not es_imagen:
+            mensaje = "hola"
+        if not telefono:
+            return jsonify({"status": "ok"}), 200
 
-@app.route('/ver_receta')
-def ver_receta():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return render_template(
-        'receta.html', paciente=request.args.get('paciente', ''), cedula=request.args.get('cedula', ''),
-        telefono=request.args.get('telefono', ''), especialidad=request.args.get('especialidad', ''),
-        receta=request.args.get('receta', ''), indicaciones=request.args.get('indicaciones', ''),
-        laboratorio=request.args.get('laboratorio', ''), estudios=request.args.get('estudios', ''), fecha=request.args.get('fecha', '')
-    )
+        mensaje_lower = mensaje.lower().strip()
 
+        if telefono not in SESIONES_WHATSAPP:
+            SESIONES_WHATSAPP[telefono] = {"paso": "INICIO", "datos": {}}
 
-def obtener_agenda_especialidad(nombre_tabla):
-    with get_db_connection() as conn:
-        registros = conn.execute(
-            f"""
-            SELECT f.*, p.nombre as paciente_nombre, p.cedula, p.telefono, p.edad, p.fecha_nacimiento, ? as nombre_tabla
-            FROM {nombre_tabla} f
-            JOIN pacientes p ON f.paciente_id = p.id
-            ORDER BY CASE WHEN f.hora_turno = 'En el momento' THEN '23:59' ELSE f.hora_turno END ASC, f.id DESC LIMIT 30
-            """, (nombre_tabla,)
-        ).fetchall()
-    return registros
+        sesion = SESIONES_WHATSAPP[telefono]
+        paso = sesion["paso"]
 
+        conn = get_db()
+        sorteo = conn.execute("SELECT * FROM sorteos WHERE estado = 'Activo' LIMIT 1").fetchone()
+        conn.close()
 
-@app.route('/ginecologia', methods=['GET', 'POST'])
-def ginecologia():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    if request.method == 'POST': return guardar_registro_comun(request.form, 'f_ginecologia', 'Ginecología y Obstetricia', 'ginecologia')
-    return render_template('ginecologia.html', rol=session.get('rol'), registros=obtener_agenda_especialidad('f_ginecologia'))
+        if "hola" in mensaje_lower or paso == "INICIO":
+            sesion["paso"] = "ESPERANDO_CANTIDAD"
+            url_flyer = request.host_url.rstrip("/").replace("http://", "https://") + url_for("static", filename="flyer_sorteo.jpg")
+            caption = (
+                f"¡Hola! Bienvenido a *VIFRAN GROUP S.A.* 🍀\nTu suerte, nuestro compromiso.\n\n"
+                f"🏆 *Sorteo:* {sorteo['titulo'] if sorteo else 'Sorteo'}\n💵 *Valor del ticket:* Gs. {sorteo['precio'] if sorteo else 10000:,}\n\n"
+                "¿Cuántos boletos te gustaría reservar?\n*(Responde únicamente con el número, ej: '2')*"
+            )
+            enviar_imagen_whatsapp(telefono, url_flyer, caption)
 
+        elif paso == "ESPERANDO_CANTIDAD" and mensaje.isdigit():
+            cantidad = int(mensaje)
+            sesion["datos"]["cantidad"] = cantidad
+            total = cantidad * (sorteo['precio'] if sorteo else 10000)
 
-@app.route('/clinica_medica', methods=['GET', 'POST'])
-def clinica_medica():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    if request.method == 'POST': return guardar_registro_comun(request.form, 'f_clinica', 'Clínica Médica', 'clinica_medica')
-    return render_template('clinica_medica.html', rol=session.get('rol'), registros=obtener_agenda_especialidad('f_clinica'))
+            sesion["paso"] = "ESPERANDO_DATOS_CLIENTE"
+            enviar_mensaje_whatsapp(
+                telefono,
+                f"🎟️ *Cantidad seleccionada:* {cantidad} boleto(s)\nTotal a pagar: *{total:,} Gs.*\n\n"
+                "📂 *Datos para el pago (Banco GNB):*\n🔸 *Alias / CI:* 4775796\n🔸 *Titular:* Patricia Franco\n\n"
+                "📝 Por favor, escribe tu *Nombre completo* y tu *Cédula/RUC* (Ej: Juan Pérez 1234567)."
+            )
 
+        elif paso == "ESPERANDO_DATOS_CLIENTE" and ("," in mensaje or " " in mensaje):
+            if "," in mensaje:
+                partes = mensaje.split(",")
+            else:
+                partes = mensaje.rsplit(" ", 1)
 
-@app.route('/psicologia', methods=['GET', 'POST'])
-def psicologia():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    if request.method == 'POST': return guardar_registro_comun(request.form, 'f_psicologia', 'Psicología Clínica', 'psicologia')
-    return render_template('psicologia.html', rol=session.get('rol'), registros=obtener_agenda_especialidad('f_psicologia'))
+            nombre_cliente = partes[0].strip()
+            cedula_cliente = partes[1].strip()
 
+            sesion["datos"]["nombre"] = nombre_cliente
+            sesion["datos"]["cedula"] = cedula_cliente
 
-@app.route('/traumatologia', methods=['GET', 'POST'])
-def traumatologia():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    if request.method == 'POST': return guardar_registro_comun(request.form, 'f_traumatologia', 'Traumatología', 'traumatologia')
-    return render_template('traumatologia.html', rol=session.get('rol'), registros=obtener_agenda_especialidad('f_traumatologia'))
+            with bloqueo_compra:
+                conn = get_db()
+                cursor = conn.cursor()
+                cursor.execute("INSERT OR REPLACE INTO clientes (telefono, nombre, cedula) VALUES (?, ?, ?)", (telefono, nombre_cliente, cedula_cliente))
+                
+                sorteo_id = sorteo["id"] if sorteo else 1
+                cantidad = sesion["datos"]["cantidad"]
 
+                lote_row = cursor.execute("SELECT valor FROM config WHERE clave = 'lote_contador'").fetchone()
+                current_lote = int(lote_row["valor"]) if lote_row else 1
+                cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES ('lote_contador', ?)", (str(current_lote + 1),))
 
-@app.route('/nutricion', methods=['GET', 'POST'])
-def nutricion():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    if request.method == 'POST': return guardar_registro_comun(request.form, 'f_nutricion', 'Nutrición', 'nutricion')
-    return render_template('nutricion.html', rol=session.get('rol'), registros=obtener_agenda_especialidad('f_nutricion'))
+                nuevos_boletos_ids = []
+                for _ in range(cantidad):
+                    liberado = cursor.execute("SELECT numero FROM numeros_liberados WHERE sorteo_id = ? ORDER BY numero ASC LIMIT 1", (sorteo_id,)).fetchone()
+                    if liberado:
+                        num_boleto = liberado["numero"]
+                        cursor.execute("DELETE FROM numeros_liberados WHERE sorteo_id = ? AND numero = ?", (sorteo_id, num_boleto))
+                    else:
+                        cont_row = cursor.execute("SELECT valor FROM config WHERE clave = ?", (f"contador_{sorteo_id}",)).fetchone()
+                        num_boleto = int(cont_row["valor"]) if cont_row else 187
+                        cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES (?, ?)", (f"contador_{sorteo_id}", str(num_boleto + 1)))
+                    nuevos_boletos_ids.append(num_boleto)
 
+                numeros_str = []
+                for num_boleto in nuevos_boletos_ids:
+                    cursor.execute('''
+                        INSERT INTO boletos (id, sorteo_id, lote_id, nombre, telefono, cedula, cantidad_lote, imagen_comprobante, metodo_pago, detalle_pago, estado, impreso)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', 0)
+                    ''', (num_boleto, sorteo_id, current_lote, nombre_cliente, telefono, cedula_cliente, cantidad, "", "WhatsApp / GNB", "Transferencia Directa"))
+                    numeros_str.append(str(num_boleto).zfill(5))
 
-@app.route('/pediatria', methods=['GET', 'POST'])
-def pediatria():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    if request.method == 'POST': return guardar_registro_comun(request.form, 'f_pediatria', 'Pediatría', 'pediatria')
-    return render_template('pediatria.html', rol=session.get('rol'), registros=obtener_agenda_especialidad('f_pediatria'))
-
-
-@app.route('/cardiologia', methods=['GET', 'POST'])
-def cardiologia():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    if request.method == 'POST': return guardar_registro_comun(request.form, 'f_cardiologia', 'Cardiología', 'cardiologia')
-    return render_template('cardiologia.html', rol=session.get('rol'), registros=obtener_agenda_especialidad('f_cardiologia'))
-
-
-@app.route('/otros', methods=['GET', 'POST'])
-def otros():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    if request.method == 'POST': return guardar_registro_comun(request.form, 'f_otros', 'Otros Servicios', 'otros')
-    return render_template('otros.html', rol=session.get('rol'), registros=obtener_agenda_especialidad('f_otros'))
-
-
-@app.route('/atender_consulta/<tabla>/<int:id_registro>/<int:paciente_id>', methods=['GET', 'POST'])
-def atender_consulta(tabla, id_registro, paciente_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    tablas_validas = [
-        'f_ginecologia', 'f_clinica', 'f_psicologia', 'f_traumatologia',
-        'f_nutricion', 'f_pediatria', 'f_cardiologia', 'f_otros'
-    ]
-    if tabla not in tablas_validas:
-        return redirect(url_for('index'))
-    with get_db_connection() as conn:
-        conn.execute(f"UPDATE {tabla} SET estado = 'Atendido' WHERE id = ?", (id_registro,))
-        conn.commit()
-        paciente_row = conn.execute('SELECT * FROM pacientes WHERE id = ?', (paciente_id,)).fetchone()
-        paciente = dict(paciente_row) if paciente_row else {}
-        registro_row = conn.execute(f'SELECT * FROM {tabla} WHERE id = ?', (id_registro,)).fetchone()
-        registro = dict(registro_row) if registro_row else {}
-        if request.method == 'POST':
-            cursor = conn.cursor()
-            cursor.execute(f'PRAGMA table_info({tabla})')
-            cols = [col['name'] for col in cursor.fetchall()]
-            updates = []
-            values = []
-            for key, val in request.form.items():
-                if key in cols and key not in ['id', 'paciente_id', 'fecha_registro']:
-                    updates.append(f'{key} = ?')
-                    values.append(val)
-            if updates:
-                values.append(id_registro)
-                query = f"UPDATE {tabla} SET {', '.join(updates)} WHERE id = ?"
-                cursor.execute(query, values)
                 conn.commit()
-            return redirect(url_for('atender_consulta', tabla=tabla, id_registro=id_registro, paciente_id=paciente_id))
-        cedula = paciente.get('cedula')
-        if cedula:
-            mismos_pacientes = conn.execute('SELECT id FROM pacientes WHERE cedula = ?', (cedula,)).fetchall()
-            paciente_ids = [row['id'] for row in mismos_pacientes]
+                conn.close()
+                respaldar_base_datos()
+
+            sesion["datos"]["lote_id"] = current_lote
+            sesion["datos"]["numeros"] = numeros_str
+
+            sesion["paso"] = "ESPERANDO_COMPROBANTE"
+            enviar_mensaje_whatsapp(
+                telefono,
+                f"✅ Datos guardados:\n👤 *Nombre:* {nombre_cliente}\n🆔 *CI/RUC:* {cedula_cliente}\n🎟️ *Tus números:* {', '.join(numeros_str)}\n\n"
+                "📸 Ahora, por favor **enviá la foto del comprobante de pago** para finalizar."
+            )
+
+        elif paso == "ESPERANDO_COMPROBANTE" and es_imagen:
+            file_data = messageData.get("fileMessageData", {})
+            download_url = file_data.get("downloadUrl", "")
+            current_lote = sesion["datos"].get("lote_id")
+
+            if current_lote:
+                with bloqueo_compra:
+                    conn = get_db()
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE boletos SET imagen_comprobante = ? WHERE lote_id = ?", (download_url, current_lote))
+                    conn.commit()
+                    conn.close()
+                    respaldar_base_datos()
+
+            enviar_mensaje_whatsapp(
+                telefono,
+                "🔍 *¡Comprobante recibido con éxito!*\n\nUn administrador verificará tu pago y te enviará tu boleto con QR en breve. ¡Muchas gracias!"
+            )
+            sesion["paso"] = "INICIO"
+
+    except Exception as e:
+        print(f"❌ Error procesando webhook: {e}")
+
+    return jsonify({"status": "ok"}), 200
+
+def crear_imagen_boleto_memoria(boleto_id, host_url):
+    conn = get_db()
+    boleto = conn.execute("SELECT * FROM boletos WHERE id = ?", (boleto_id,)).fetchone()
+    if not boleto:
+        conn.close()
+        return None
+    sorteo = conn.execute("SELECT titulo FROM sorteos WHERE id = ?", (boleto["sorteo_id"],)).fetchone()
+    conn.close()
+
+    sorteo_titulo = sorteo["titulo"] if sorteo else "Sorteo de 4 iPhones"
+
+    ancho, alto = 420, 580
+    img = Image.new("RGB", (ancho, alto), color="white")
+    d = ImageDraw.Draw(img)
+
+    try:
+        font_titulo = ImageFont.truetype("arial.ttf", 20)
+        font_texto = ImageFont.truetype("arial.ttf", 14)
+        font_grande = ImageFont.truetype("arial.ttf", 26)
+    except:
+        font_titulo = ImageFont.load_default()
+        font_texto = ImageFont.load_default()
+        font_grande = ImageFont.load_default()
+
+    d.text((ancho / 2, 25), "VIFRAN GROUP S.A.", fill="black", anchor="mm", font=font_titulo)
+    d.line([(20, 45), (ancho - 20, 45)], fill="black", width=2)
+    d.text((20, 65), f"CLIENTE: {boleto['nombre'].upper()}", fill="black", font=font_texto)
+    d.text((20, 90), f"RUC/CI: {boleto['cedula']} | TEL: {boleto['telefono']}", fill="black", font=font_texto)
+    d.line([(20, 115), (ancho - 20, 115)], fill="black", width=1)
+    d.text((20, 130), f"EDICION: {sorteo_titulo}", fill="black", font=font_texto)
+    d.text((20, 155), f"PAGO: {boleto['metodo_pago']}", fill="black", font=font_texto)
+    d.line([(20, 180), (ancho - 20, 180)], fill="black", width=1)
+    d.text((ancho / 2, 210), f"NRO: #{str(boleto['id']).zfill(5)}", fill="black", anchor="mm", font=font_grande)
+    d.line([(20, 240), (ancho - 20, 240)], fill="black", width=1)
+
+    url_segura = host_url.rstrip('/').replace("http://", "https://")
+    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={url_segura}/validar/{boleto['id']}"
+    
+    try:
+        res_qr = requests.get(qr_url)
+        if res_qr.status_code == 200:
+            qr_img = Image.open(io.BytesIO(res_qr.content)).resize((150, 150))
+            img.paste(qr_img, (int((ancho - 150) / 2), 255))
+    except Exception:
+        pass
+
+    output = io.BytesIO()
+    img.save(output, format="PNG")
+    output.seek(0)
+    return output
+
+@app.route("/api/ticket-imagen/<int:boleto_id>")
+def obtener_ticket_imagen(boleto_id):
+    output = crear_imagen_boleto_memoria(boleto_id, request.host_url)
+    if not output: return "Boleto no encontrado", 404
+    return send_file(output, mimetype="image/png")
+
+@app.route("/validar/<int:boleto_id>")
+def validar_boleto_qr(boleto_id):
+    conn = get_db()
+    boleto = conn.execute("SELECT * FROM boletos WHERE id = ?", (boleto_id,)).fetchone()
+    if not boleto:
+        conn.close()
+        return "<h3>Boleto no encontrado</h3>", 404
+    sorteo = conn.execute("SELECT * FROM sorteos WHERE id = ?", (boleto["sorteo_id"],)).fetchone()
+    conn.close()
+
+    estado_color = "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" if boleto["estado"] == "Aprobado" else "text-amber-400 bg-amber-500/10 border-amber-500/30"
+
+    return f"""
+        <!DOCTYPE html>
+        <html lang="es">
+        <head><meta charset="UTF-8"><title>Validación de Boleto</title><script src="https://cdn.tailwindcss.com"></script></head>
+        <body class="bg-slate-900 text-white flex items-center justify-center min-h-screen p-4 font-sans">
+            <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700 max-w-md w-full space-y-6 text-center">
+                <h1 class="text-xl font-black text-amber-400">VIFRAN GROUP S.A.</h1>
+                <span class="text-3xl font-black text-amber-400 block">#{str(boleto['id']).zfill(5)}</span>
+                <p class="text-sm font-bold">{sorteo['titulo'] if sorteo else 'Sorteo General'}</p>
+                <p class="text-xs text-slate-300">Cliente: {boleto['nombre']} (CI: {boleto['cedula']})</p>
+                <span class="inline-block px-4 py-1.5 rounded-xl text-xs font-bold border {estado_color}">Estado: {boleto['estado']}</span>
+            </div>
+        </body>
+        </html>
+    """
+
+def verificar_admin(data):
+    return data.get("usuario") in ADMIN_USERS and ADMIN_USERS[data.get("usuario")] == data.get("password")
+
+@app.route("/api/admin/datos", methods=["POST"])
+def admin_datos():
+    if not verificar_admin(request.json): return jsonify({"error": "No autorizado"}), 401
+    
+    with bloqueo_compra:
+        conn_fix = get_db()
+        sorteos = conn_fix.execute("SELECT * FROM sorteos").fetchall()
+        boletos = conn_fix.execute("SELECT * FROM boletos ORDER BY id ASC").fetchall()
+        total_clientes = conn_fix.execute("SELECT COUNT(*) FROM clientes").fetchone()[0]
+        conn_fix.close()
+
+    return jsonify({
+        "sorteos": [dict(s) for s in sorteos],
+        "boletos": [dict(b) for b in boletos],
+        "total_clientes": total_clientes
+    })
+
+@app.route("/api/admin/crear-sorteo", methods=["POST"])
+def admin_crear_sorteo():
+    data = request.json
+    if not verificar_admin(data): return jsonify({"error": "No autorizado"}), 401
+    with bloqueo_compra:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO sorteos (titulo, precio, limite_boletos, estado, imagen_nombre)
+            VALUES (?, ?, ?, 'Activo', 'flyer_sorteo.jpg')
+        ''', (data.get("titulo"), int(data.get("precio", 10000)), int(data.get("limite_boletos", 1000))))
+        nuevo_id = cursor.lastrowid
+        cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES (?, ?)", (f"contador_{nuevo_id}", "187"))
+        conn.commit()
+        nuevo_sorteo = dict(cursor.execute("SELECT * FROM sorteos WHERE id = ?", (nuevo_id,)).fetchone())
+        conn.close()
+        respaldar_base_datos()
+    return jsonify({"mensaje": "¡Sorteo creado con éxito!", "sorteo": nuevo_sorteo})
+
+@app.route("/api/admin/finalizar-sorteo/<int:sorteo_id>", methods=["POST"])
+def admin_finalizar_sorteo(sorteo_id):
+    data = request.json
+    if not verificar_admin(data): return jsonify({"error": "No autorizado"}), 401
+    with bloqueo_compra:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE sorteos SET estado = 'Finalizado' WHERE id = ?", (sorteo_id,))
+        conn.commit()
+        conn.close()
+        respaldar_base_datos()
+    return jsonify({"mensaje": "¡Sorteo finalizado con éxito!"}), 200
+
+@app.route("/api/admin/agregar-manual", methods=["POST"])
+def admin_agregar_manual():
+    data = request.json
+    if not verificar_admin(data): return jsonify({"error": "No autorizado"}), 401
+    
+    sorteo_id = int(data.get("sorteo_id", 1))
+    nombre = data.get("nombre")
+    telefono = data.get("telefono", "0000000000")
+    cedula = data.get("cedula", "0000000")
+    cantidad = int(data.get("cantidad", 1))
+    inicio_personalizado = data.get("inicio_personalizado")
+
+    if not nombre or cantidad < 1:
+        return jsonify({"error": "El nombre y la cantidad son obligatorios."}), 400
+
+    with bloqueo_compra:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        lote_row = cursor.execute("SELECT valor FROM config WHERE clave = 'lote_contador'").fetchone()
+        current_lote = int(lote_row["valor"]) if lote_row else 1
+        cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES ('lote_contador', ?)", (str(current_lote + 1),))
+
+        nuevos_boletos_ids = []
+        if inicio_personalizado is not None and str(inicio_personalizado).strip() != "":
+            num_actual = int(inicio_personalizado)
+            for _ in range(cantidad):
+                nuevos_boletos_ids.append(num_actual)
+                num_actual += 1
         else:
-            paciente_ids = [paciente_id]
-        placeholders = ','.join(['?'] * len(paciente_ids))
-        query_historial = f'SELECT * FROM {tabla} WHERE paciente_id IN ({placeholders}) AND id != ? ORDER BY fecha_consulta DESC'
-        params_historial = paciente_ids + [id_registro]
-        regs = conn.execute(query_historial, params_historial).fetchall()
-        historial = [dict(row) for row in regs]
+            for _ in range(cantidad):
+                liberado = cursor.execute("SELECT numero FROM numeros_liberados WHERE sorteo_id = ? ORDER BY numero ASC LIMIT 1", (sorteo_id,)).fetchone()
+                if liberado:
+                    num_boleto = liberado["numero"]
+                    cursor.execute("DELETE FROM numeros_liberados WHERE sorteo_id = ? AND numero = ?", (sorteo_id, num_boleto))
+                else:
+                    cont_row = cursor.execute("SELECT valor FROM config WHERE clave = ?", (f"contador_{sorteo_id}",)).fetchone()
+                    num_boleto = int(cont_row["valor"]) if cont_row else 187
+                    cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES (?, ?)", (f"contador_{sorteo_id}", str(num_boleto + 1)))
+                nuevos_boletos_ids.append(num_boleto)
 
-    plantillas_especialidades = {
-        'f_ginecologia': 'ginecologia.html', 'f_clinica': 'clinica_medica.html',
-        'f_pediatria': 'pediatria.html', 'f_cardiologia': 'cardiologia.html',
-        'f_psicologia': 'psicologia.html', 'f_traumatologia': 'traumatologia.html',
-        'f_nutricion': 'nutricion.html', 'f_otros': 'otros.html',
-    }
-    plantilla_destino = plantillas_especialidades.get(tabla, 'index.html')
-    return render_template(
-        plantilla_destino, paciente=paciente, registro=registro, tabla=tabla,
-        id_registro=id_registro, historial=historial, rol=session.get('rol'), username=session.get('username')
-    )
+        max_num = max(nuevos_boletos_ids)
+        cont_row = cursor.execute("SELECT valor FROM config WHERE clave = ?", (f"contador_{sorteo_id}",)).fetchone()
+        actual_cont = int(cont_row["valor"]) if cont_row else 187
+        if max_num >= actual_cont:
+            cursor.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES (?, ?)", (f"contador_{sorteo_id}", str(max_num + 1)))
 
+        for num_boleto in nuevos_boletos_ids:
+            estado_inicial = 'Aprobado'
+            impreso_inicial = 1
 
-# --- INICIALIZACIÓN SEGURA PARA PRODUCCIÓN (GUNICORN / RENDER) ---
-try:
-    init_db()
-except Exception as e:
-    print(f"Error al inicializar la base de datos: {e}")
+            cursor.execute('''
+                INSERT OR REPLACE INTO boletos (id, sorteo_id, lote_id, nombre, telefono, cedula, cantidad_lote, imagen_comprobante, metodo_pago, detalle_pago, estado, impreso)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'Carga Manual', 'Manual (Recuperación)', 'Carga interna', ?, ?)
+            ''', (num_boleto, sorteo_id, current_lote, nombre, telefono, cedula, cantidad, estado_inicial, impreso_inicial))
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    threading.Timer(1.0, lambda: webbrowser.open(f'http://127.0.0.1:{port}')).start()
-    app.run(host='0.0.0.0', port=port, debug=False)
+        conn.commit()
+        conn.close()
+        respaldar_base_datos()
+
+    return jsonify({"mensaje": f"¡{cantidad} boletos agregados manualmente (del #{nuevos_boletos_ids[0]} al #{nuevos_boletos_ids[-1]}) para {nombre}!"}), 200
+
+@app.route("/api/admin/aprobar-lote/<int:lote_id>", methods=["POST"])
+def admin_aprobar_lote(lote_id):
+    if not verificar_admin(request.json): return jsonify({"error": "No autorizado"}), 401
+    host_actual = request.host_url
+    with bloqueo_compra:
+        conn = get_db()
+        cursor = conn.cursor()
+        boletos_lote = cursor.execute("SELECT * FROM boletos WHERE lote_id = ? AND estado = 'Pendiente'", (lote_id,)).fetchall()
+        
+        if not boletos_lote:
+            conn.close()
+            return jsonify({"error": "Lote no encontrado o ya aprobado"}), 404
+
+        cursor.execute("UPDATE boletos SET estado = 'Aprobado', impreso = 0 WHERE lote_id = ?", (lote_id,))
+        conn.commit()
+        conn.close()
+        respaldar_base_datos()
+
+        for b in boletos_lote:
+            conn2 = get_db()
+            sorteo = conn2.execute("SELECT * FROM sorteos WHERE id = ?", (b["sorteo_id"],)).fetchone()
+            conn2.close()
+            precio = sorteo["precio"] if sorteo else 10000
+            titulo = sorteo["titulo"] if sorteo else "Sorteo General"
+            caption = f"✨ *¡Pago Verificado y Boleto Emitido!*\n\nCLIENTE: {b['nombre']}\nRUC/CI: {b['cedula']}\nEDICION: {titulo}\nA: Gs. {precio:,}\nNRO: #{str(b['id']).zfill(5)}\n\n🍀 *¡Muchísima suerte con VIFRAN GROUP S.A.!*"
+            enviar_ticket_directo(b['telefono'], b['id'], host_actual, caption)
+
+    return jsonify({"mensaje": f"¡Lote aprobado con éxito ({len(boletos_lote)} boletos)!"}), 200
+
+@app.route("/api/admin/eliminar-lote/<int:lote_id>", methods=["POST"])
+def admin_eliminar_lote(lote_id):
+    data = request.json or {}
+    if not verificar_admin(data): return jsonify({"error": "No autorizado"}), 401
+    
+    with bloqueo_compra:
+        conn = get_db()
+        cursor = conn.cursor()
+        boletos_a_eliminar = cursor.execute("SELECT * FROM boletos WHERE lote_id = ? AND estado = 'Pendiente'", (lote_id,)).fetchall()
+        
+        if not boletos_a_eliminar:
+            conn.close()
+            return jsonify({"error": "Lote no encontrado o ya fue aprobado."}), 404
+        
+        sorteo_id = boletos_a_eliminar[0]["sorteo_id"]
+        for b in boletos_a_eliminar:
+            cursor.execute("INSERT OR IGNORE INTO numeros_liberados (sorteo_id, numero) VALUES (?, ?)", (sorteo_id, b["id"]))
+            
+        cursor.execute("DELETE FROM boletos WHERE lote_id = ? AND estado = 'Pendiente'", (lote_id,))
+        conn.commit()
+        conn.close()
+        respaldar_base_datos()
+        
+    return jsonify({"mensaje": f"¡Lote #{lote_id} eliminado y números liberados con éxito!"}), 200
+
+@app.route("/api/pendientes-impresion", methods=["GET"])
+def obtener_pendientes_impresion():
+    conn = get_db()
+    boletos_aprobados = conn.execute("SELECT * FROM boletos WHERE estado = 'Aprobado' AND impreso = 0 ORDER BY id ASC").fetchall()
+    
+    pendientes = []
+    lotes_procesados = set()
+    for b in boletos_aprobados:
+        if b["lote_id"] not in lotes_procesados:
+            lotes_procesados.add(b["lote_id"])
+            sorteo = conn.execute("SELECT titulo FROM sorteos WHERE id = ?", (b["sorteo_id"],)).fetchone()
+            nums = conn.execute("SELECT id FROM boletos WHERE lote_id = ? ORDER BY id ASC", (b["lote_id"],)).fetchall()
+            if nums:
+                pendientes.append({
+                    "id": b["lote_id"],
+                    "sorteo_titulo": sorteo["titulo"] if sorteo else "Sorteo General",
+                    "nombre": b["nombre"],
+                    "cedula": b["cedula"],
+                    "telefono": b["telefono"],
+                    "numeros_asignados": [str(x["id"]).zfill(5) for x in nums]
+                })
+    conn.close()
+    return jsonify(pendientes), 200
+
+@app.route("/api/marcar-impreso/<int:lote_id>", methods=["POST"])
+def marcar_como_impreso(lote_id):
+    conn = get_db()
+    conn.execute("UPDATE boletos SET impreso = 1 WHERE lote_id = ?", (lote_id,))
+    conn.commit()
+    conn.close()
+    respaldar_base_datos()
+    return jsonify({"status": "success"}), 200
+
+@app.route("/api/reimprimir/<int:boleto_id>", methods=["POST"])
+def api_reimprimir(boleto_id):
+    data = request.json
+    if not verificar_admin(data): return jsonify({"error": "No autorizado"}), 401
+    conn = get_db()
+    conn.execute("UPDATE boletos SET impreso = 0 WHERE id = ?", (boleto_id,))
+    conn.commit()
+    conn.close()
+    respaldar_base_datos()
+    return jsonify({"mensaje": f"Boleto #{boleto_id} reenviado a la impresora."}), 200
+
+@app.route("/api/admin/limpiar-pruebas", methods=["POST"])
+def limpiar_pruebas():
+    data = request.json
+    if not verificar_admin(data): return jsonify({"error": "No autorizado"}), 401
+    with bloqueo_compra:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM boletos")
+        cursor.execute("DELETE FROM numeros_liberados")
+        cursor.execute("UPDATE config SET valor = '187' WHERE clave LIKE 'contador_%'")
+        cursor.execute("UPDATE config SET valor = '1' WHERE clave = 'lote_contador'")
+        conn.commit()
+        conn.close()
+        respaldar_base_datos()
+    return jsonify({"mensaje": "¡Sistema limpiado con éxito!"}), 200
+
+@app.route("/impresion")
+def vista_impresion_web():
+    return render_template("impresion.html")
+
+if __name__ == "__main__":
+    app.run(debug=True)
